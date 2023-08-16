@@ -3,7 +3,7 @@
 from typing import Any
 
 from ml_croissant._src.core.issues import Issues
-from ml_croissant._src.structure_graph.nodes import Source
+from ml_croissant._src.structure_graph.nodes.source import Source
 
 
 def _is_in(elements: list[Any], name: str):

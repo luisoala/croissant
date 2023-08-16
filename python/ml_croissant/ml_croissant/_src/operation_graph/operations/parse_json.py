@@ -3,26 +3,11 @@
 from typing import Any
 
 import jsonpath_rw
-import networkx as nx
 import pandas as pd
 
-from ml_croissant._src.structure_graph.nodes import Field
-from ml_croissant._src.structure_graph.nodes import RecordSet
+from ml_croissant._src.structure_graph.nodes.field import Field
 
 Json = dict[str, Any]
-
-
-def get_fields(record_set: RecordSet, graph: nx.MultiDiGraph) -> list[Field]:
-    """Gets the fields of a given record set.
-
-    TODO(https://github.com/mlcommons/croissant/issues/164): In the future, this will
-    be added to RecordSet's API: `record_set.fields`.
-    """
-    fields: list[Field] = []
-    for node in graph.nodes:
-        if isinstance(node, Field) and node.parent == record_set:
-            fields.append(node)
-    return fields
 
 
 def parse_json_content(json: Json, fields: list[Field]) -> pd.DataFrame:

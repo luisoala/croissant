@@ -1,18 +1,18 @@
 """Testing utils for `Node`."""
 
 import functools
-from typing import Any
+from typing import Any, Callable
 
 from etils import epath
 import networkx as nx
-from rdflib import term
 
+from ml_croissant._src.core.issues import Context
 from ml_croissant._src.core.issues import Issues
 from ml_croissant._src.structure_graph.base_node import Node
-from ml_croissant._src.structure_graph.nodes import Field
-from ml_croissant._src.structure_graph.nodes import FileObject
-from ml_croissant._src.structure_graph.nodes import FileSet
-from ml_croissant._src.structure_graph.nodes import RecordSet
+from ml_croissant._src.structure_graph.nodes.field import Field
+from ml_croissant._src.structure_graph.nodes.file_object import FileObject
+from ml_croissant._src.structure_graph.nodes.file_set import FileSet
+from ml_croissant._src.structure_graph.nodes.record_set import RecordSet
 
 
 class _EmptyNode(Node):
@@ -23,11 +23,11 @@ class _EmptyNode(Node):
 def _node_params(**kwargs):
     params = {
         "issues": Issues(),
-        "bnode": term.BNode("rdf_id"),
+        "context": Context(),
         "graph": nx.MultiDiGraph(),
         "name": "node_name",
         "folder": epath.Path(),
-        "parents": (),
+        "parents": [],
     }
     for key, value in kwargs.items():
         params[key] = value
@@ -43,7 +43,6 @@ def create_test_node(cls: type[Any], **kwargs):
     ```python
     node = FileSet(
         issues=...,
-        bnode=...,
         graph=...,
         name=...,
         folder=...,
@@ -60,20 +59,22 @@ def create_test_node(cls: type[Any], **kwargs):
     return cls(**_node_params(**kwargs))
 
 
-create_test_field = functools.partial(create_test_node, Field, name="field_name")
-create_test_file_object = functools.partial(
+create_test_field: Callable[..., Field] = functools.partial(
+    create_test_node, Field, name="field_name"
+)
+create_test_file_object: Callable[..., FileObject] = functools.partial(
     create_test_node, FileObject, name="file_object_name"
 )
-create_test_file_set = functools.partial(
+create_test_file_set: Callable[..., FileSet] = functools.partial(
     create_test_node, FileSet, name="file_set_name"
 )
-create_test_record_set = functools.partial(
+create_test_record_set: Callable[..., RecordSet] = functools.partial(
     create_test_node, RecordSet, name="record_set_name"
 )
 
 
-empty_field = create_test_node(Field, name="field_name")
-empty_file_object = create_test_node(FileObject, name="file_object_name")
-empty_file_set = create_test_node(FileSet, name="file_set_name")
-empty_node = create_test_node(_EmptyNode)
-empty_record_set = create_test_node(RecordSet, name="record_set_name")
+empty_field: Field = create_test_node(Field, name="field_name")
+empty_file_object: FileObject = create_test_node(FileObject, name="file_object_name")
+empty_file_set: FileSet = create_test_node(FileSet, name="file_set_name")
+empty_node: Node = create_test_node(_EmptyNode)
+empty_record_set: RecordSet = create_test_node(RecordSet, name="record_set_name")

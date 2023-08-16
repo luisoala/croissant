@@ -96,7 +96,11 @@ def _sort_dict(d: dict[str, Any]):
     }
 
 
-def _recursively_populate_fields(entry_node: Json, id_to_node: dict[str, Json]) -> Any:
+def remove_none_values(d: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in d.items() if v}
+
+
+def recursively_populate_fields(entry_node: Json, id_to_node: dict[str, Json]) -> Any:
     """Changes in place `entry_node` with its children."""
     if "@value" in entry_node:
         if entry_node.get("@type") == str(namespace.RDF.JSON):
@@ -109,14 +113,14 @@ def _recursively_populate_fields(entry_node: Json, id_to_node: dict[str, Json]) 
         node_id = entry_node["@id"]
         if node_id in id_to_node:
             node = id_to_node[node_id]
-            return _recursively_populate_fields(node, id_to_node)
+            return recursively_populate_fields(node, id_to_node)
         else:
             return entry_node
     for key, value in entry_node.items():
         if key == "@type":
             entry_node[key] = value[0]
         elif isinstance(value, list):
-            value = [_recursively_populate_fields(child, id_to_node) for child in value]
+            value = [recursively_populate_fields(child, id_to_node) for child in value]
             node_type = entry_node.get("@type", "")
             if (term.URIRef(key), term.URIRef(node_type)) in _KEYS_WITH_LIST:
                 entry_node[key] = value
@@ -153,7 +157,7 @@ def expand_json_ld(data: Json) -> Json:
     for node in nodes:
         node_id = node.get("@id")
         id_to_node[node_id] = node
-    _recursively_populate_fields(entry_node, id_to_node)
+    recursively_populate_fields(entry_node, id_to_node)
     entry_node["@context"] = _make_context()
     return entry_node
 

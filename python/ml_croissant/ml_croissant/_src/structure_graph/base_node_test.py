@@ -7,7 +7,7 @@ from ml_croissant._src.tests.nodes import create_test_node
 
 
 def test_there_exists_at_least_one_property():
-    @dataclasses.dataclass(frozen=True, repr=False)
+    @dataclasses.dataclass
     class Node(base_node.Node):
         property1: str = ""
         property2: str = ""
@@ -25,20 +25,3 @@ def test_there_exists_at_least_one_property():
     )
     assert not base_node.there_exists_at_least_one_property(node, [])
     assert not base_node.there_exists_at_least_one_property(node, ["property0"])
-
-
-def test_repr():
-    @dataclasses.dataclass(frozen=True, repr=False)
-    class MyNode(base_node.Node):
-        foo: str = ""
-        bar: str | None = None
-
-        def check(self):
-            pass
-
-    node = create_test_node(
-        MyNode,
-        name="name",
-        foo="foo",
-    )
-    assert str(node) == "MyNode(uid=name, foo=foo, name=name)"

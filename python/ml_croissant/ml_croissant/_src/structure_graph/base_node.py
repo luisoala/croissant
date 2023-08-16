@@ -5,10 +5,10 @@ from __future__ import annotations
 import abc
 import dataclasses
 import re
+from typing import Any
 
 from etils import epath
 import networkx as nx
-from rdflib import term
 
 from ml_croissant._src.core import constants
 from ml_croissant._src.core.issues import Context
@@ -18,7 +18,7 @@ ID_REGEX = "[a-zA-Z0-9\\-_\\.]+"
 _MAX_ID_LENGTH = 255
 
 
-@dataclasses.dataclass(frozen=True, repr=False)
+@dataclasses.dataclass(eq=False, repr=False)
 class Node(abc.ABC):
     """Structure node in Croissant.
 
@@ -33,19 +33,22 @@ class Node(abc.ABC):
 
     Args:
         issues: the issues that will be modified in-place.
-        bnode: The RDF BNode this node is based on.
+        # Update me....
         graph: The structure graph.
         parents: The parent nodes in the Croissant JSON-LD as a tuple.
         folder: The path of the Croissant folder.
         name: The name of the node.
     """
 
-    issues: Issues
-    bnode: term.BNode
-    graph: nx.MultiDiGraph
-    parents: tuple[Node, ...]
-    folder: epath.Path
-    name: str
+    # CLEAN ME
+    issues: Issues = dataclasses.field(hash=False)
+    context: Context
+    graph: nx.MultiDiGraph = dataclasses.field(
+        default_factory=nx.MultiDiGraph, hash=False
+    )
+    parents: list[Node] = dataclasses.field(default_factory=list, hash=False)
+    folder: epath.Path | None = None  # not needed anymore???
+    name: str = dataclasses.field(default="<unknown>", hash=True)
 
     def __post_init__(self):
         """Checks for `name` (common property between all nodes)."""
@@ -112,18 +115,11 @@ class Node(abc.ABC):
     @abc.abstractmethod
     def check(self):
         """Abstract method to implement checks that will be performed on the node."""
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def __repr__(self) -> str:
         """Prints a simplified string representation of the node."""
-        attributes = self.__dict__.copy()
-        attributes_to_remove = ["bnode", "folder", "graph", "issues", "parents"]
-        for attribute in self.__dict__:
-            if attributes[attribute] is None or attribute in attributes_to_remove:
-                del attributes[attribute]
-        attributes_items = sorted(list(attributes.items()))
-        attributes_str = ", ".join(f"{key}={value}" for key, value in attributes_items)
-        return f"{self.__class__.__name__}(uid={self.uid}, {attributes_str})"
+        return f'{self.__class__.__name__}(uid="{self.uid}")'
 
     @property
     def uid(self) -> str:
@@ -137,23 +133,14 @@ class Node(abc.ABC):
         return f"{self.parents[-1].uid}/{self.name}"
 
     @property
-    def context(self) -> Context:
-        """Context for the current node according to its parents."""
-        nodes = self.parents + (self,)
-        return Context(
-            dataset_name=_get_element(nodes, ["Metadata"]),
-            distribution_name=_get_element(nodes, ["FileObject", "FileSet"]),
-            record_set_name=_get_element(nodes, ["RecordSet"]),
-            field_name=_get_element(nodes, ["Field"]),
-            sub_field_name=_get_element(nodes, []),
-        )
-
-    @property
     def parent(self) -> Node | None:
         """Direct parent of the node or None if no parent."""
         if not self.parents:
             return None
         return self.parents[-1]
+
+    def to_json(self) -> dict[str, Any]:
+        raise NotImplementedError()
 
 
 def validate_name(issues: Issues, name: str):

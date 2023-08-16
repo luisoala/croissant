@@ -24,14 +24,17 @@ def test_source_bool():
     [
         [
             {
-                "field": "token-files/content",
+                "http://mlcommons.org/schema/field": "token-files/content",
             },
-            Source(uid="token-files/content"),
+            Source(uid="token-files/content", node_type="field"),
         ],
         [
             {
-                "field": "token-files/content",
-                "apply_transform": [{"replace": "\\n/<eos>"}, {"separator": " "}],
+                "http://mlcommons.org/schema/field": "token-files/content",
+                "http://mlcommons.org/schema/applyTransform": [
+                    {"http://mlcommons.org/schema/replace": "\\n/<eos>"},
+                    {"http://mlcommons.org/schema/separator": " "},
+                ],
             },
             Source(
                 uid="token-files/content",
@@ -39,13 +42,17 @@ def test_source_bool():
                     Transform(replace="\\n/<eos>"),
                     Transform(separator=" "),
                 ),
+                node_type="field",
             ),
         ],
         [
             [
                 {
-                    "field": "token-files/content",
-                    "apply_transform": [{"replace": "\\n/<eos>"}, {"separator": " "}],
+                    "http://mlcommons.org/schema/field": "token-files/content",
+                    "http://mlcommons.org/schema/applyTransform": [
+                        {"http://mlcommons.org/schema/replace": "\\n/<eos>"},
+                        {"http://mlcommons.org/schema/separator": " "},
+                    ],
                 }
             ],
             Source(
@@ -54,18 +61,27 @@ def test_source_bool():
                     Transform(replace="\\n/<eos>"),
                     Transform(separator=" "),
                 ),
+                node_type="field",
             ),
         ],
         [
             {
-                "distribution": "my-csv",
-                "apply_transform": [{"replace": "\\n/<eos>", "separator": " "}],
-                "data_extraction": {"csv_column": "my-column"},
+                "https://schema.org/distribution": "my-csv",
+                "http://mlcommons.org/schema/applyTransform": [
+                    {
+                        "http://mlcommons.org/schema/replace": "\\n/<eos>",
+                        "http://mlcommons.org/schema/separator": " ",
+                    }
+                ],
+                "http://mlcommons.org/schema/dataExtraction": {
+                    "http://mlcommons.org/schema/csvColumn": "my-column"
+                },
             },
             Source(
                 extract=Extract(csv_column="my-column"),
                 uid="my-csv",
                 transforms=(Transform(replace="\\n/<eos>", separator=" "),),
+                node_type="distribution",
             ),
         ],
     ],
@@ -79,7 +95,10 @@ def test_source_parses_list(json_ld, expected_source):
 
 def test_declaring_multiple_sources_in_one():
     issues = Issues()
-    json_ld = {"distribution": "my-csv", "field": "my-record-set/my-field"}
+    json_ld = {
+        "https://schema.org/distribution": "my-csv",
+        "http://mlcommons.org/schema/field": "my-record-set/my-field",
+    }
     assert Source.from_json_ld(issues, json_ld) == Source()
     assert issues.errors == {
         "Every http://mlcommons.org/schema/source should declare either"
@@ -90,15 +109,17 @@ def test_declaring_multiple_sources_in_one():
 def test_declaring_multiple_data_extraction_in_one():
     issues = Issues()
     json_ld = {
-        "distribution": "my-csv",
-        "data_extraction": {
-            "csv_column": "csv_column",
-            "json_path": "json_path",
+        "https://schema.org/distribution": "my-csv",
+        "http://mlcommons.org/schema/dataExtraction": {
+            "@id": "jsonld-id",
+            "http://mlcommons.org/schema/csvColumn": "csv_column",
+            "http://mlcommons.org/schema/jsonPath": "json_path",
         },
     }
     assert Source.from_json_ld(issues, json_ld) == Source(
         uid="my-csv",
         extract=Extract(csv_column="csv_column", json_path="json_path"),
+        node_type="distribution",
     )
     assert len(issues.errors) == 1
     assert (
@@ -111,9 +132,9 @@ def test_declaring_multiple_data_extraction_in_one():
 def test_declaring_wrong_file_property():
     issues = Issues()
     json_ld = {
-        "distribution": "my-csv",
-        "data_extraction": {
-            "file_property": "foo",
+        "https://schema.org/distribution": "my-csv",
+        "http://mlcommons.org/schema/dataExtraction": {
+            "http://mlcommons.org/schema/fileProperty": "foo",
         },
     }
     Source.from_json_ld(issues, json_ld)

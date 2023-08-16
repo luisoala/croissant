@@ -18,6 +18,8 @@ A lot of methods in this file share common data structures (issues, graph, folde
 so they should be grouped under a common `StructureGraph` class.
 """
 
+from __future__ import annotations
+
 import collections
 import dataclasses
 import json
@@ -29,21 +31,25 @@ import rdflib
 from rdflib import term
 
 from ml_croissant._src.core import constants
+from ml_croissant._src.core.issues import Context
 from ml_croissant._src.core.issues import Issues
+from ml_croissant._src.core.json_ld import _is_dataset_node
+from ml_croissant._src.core.json_ld import _sort_dict
+from ml_croissant._src.core.json_ld import expand_json_ld
+from ml_croissant._src.core.json_ld import recursively_populate_fields
 from ml_croissant._src.structure_graph.base_node import Node
-from ml_croissant._src.structure_graph.nodes import Field
-from ml_croissant._src.structure_graph.nodes import FileObject
-from ml_croissant._src.structure_graph.nodes import FileSet
-from ml_croissant._src.structure_graph.nodes import Metadata
-from ml_croissant._src.structure_graph.nodes import RecordSet
-from ml_croissant._src.structure_graph.nodes import Source
+from ml_croissant._src.structure_graph.nodes.field import Field
+from ml_croissant._src.structure_graph.nodes.field import ParentField
+from ml_croissant._src.structure_graph.nodes.file_object import FileObject
+from ml_croissant._src.structure_graph.nodes.file_set import FileSet
+from ml_croissant._src.structure_graph.nodes.metadata import Metadata
+from ml_croissant._src.structure_graph.nodes.record_set import RecordSet
+from ml_croissant._src.structure_graph.nodes.source import Source
 
 Json = dict[str, Any]
 
-NodeType = type[Field | FileObject | FileSet | Metadata | Node | RecordSet]
 
-
-def from_file_to_json(filepath: epath.PathLike) -> tuple[epath.Path, Json]:
+def from_file_to_jsonld(filepath: epath.PathLike) -> tuple[epath.Path, Json]:
     """Loads the file as a JSON.
 
     Args:
@@ -57,7 +63,235 @@ def from_file_to_json(filepath: epath.PathLike) -> tuple[epath.Path, Json]:
     if not filepath.exists():
         raise ValueError(f"File {filepath} does not exist.")
     with filepath.open() as f:
-        return filepath, json.load(f)
+        data = json.load(f)
+    graph = rdflib.Graph()
+    graph.parse(
+        data=data,
+        format="json-ld",
+    )
+    # `graph.serialize` outputs a stringified list of JSON-LD nodes.
+    nodes = graph.serialize(format="json-ld")
+    nodes = json.loads(nodes)
+    return filepath, nodes
+
+
+# In jsonld.py?
+def from_jsonld_to_json(jsonld: list[Json]) -> Json:
+    # Check jsonld is not empty
+    id_to_node: dict[str, Json] = {}
+    for node in jsonld:
+        node_id = node.get("@id")
+        id_to_node[node_id] = node
+    # Find the entry node (schema.org/Dataset).
+    entry_node = next(
+        (record for record in jsonld if _is_dataset_node(record)), jsonld[0]
+    )
+    recursively_populate_fields(entry_node, id_to_node)
+    return entry_node
+
+
+# This shluld be a classmethod: Field.from_jsonld? Same for all.
+def new_field(
+    issues: Issues, context: Context, field: Json, is_sub_field: bool = False
+) -> Field:
+    check_expected_type(
+        issues,
+        field,
+        constants.ML_COMMONS_FIELD_TYPE,
+    )
+    references_jsonld = field.get(str(constants.ML_COMMONS_REFERENCES))
+    references = Source.from_json_ld(issues, references_jsonld)
+    source_jsonld = field.get(str(constants.ML_COMMONS_SOURCE))
+    source = Source.from_json_ld(issues, source_jsonld)
+    data_type = field.get(str(constants.ML_COMMONS_DATA_TYPE), {})
+    is_enumeration = field.get(str(constants.SCHEMA_ORG_IS_ENUMERATION))
+    if isinstance(data_type, dict):
+        data_type = data_type.get("@id")
+    elif isinstance(data_type, list):
+        data_type = [d.get("@id") for d in data_type]
+    else:
+        data_type = None
+    field_name = field.get(str(constants.SCHEMA_ORG_NAME), "")
+    if is_sub_field:
+        context.sub_field_name = field_name
+    else:
+        context.field_name = field_name
+    sub_fields = field.get(str(constants.ML_COMMONS_SUB_FIELD), [])
+    if isinstance(sub_fields, dict):
+        sub_fields = [sub_fields]
+    sub_fields = [
+        new_field(issues, context, sub_field, is_sub_field=True)
+        for sub_field in sub_fields
+    ]
+    parent_field = ParentField.from_json(
+        issues, field.get(str(constants.SCHEMA_ORG_PARENT_FIELD))
+    )
+    repeated = field.get(str(constants.SCHEMA_ORG_REPEATED))
+    return Field(
+        issues=issues,
+        context=context,
+        description=field.get(str(constants.SCHEMA_ORG_DESCRIPTION)),
+        data_type=data_type,
+        is_enumeration=is_enumeration,
+        name=field_name,
+        parent_field=parent_field,
+        references=references,
+        repeated=repeated,
+        source=source,
+        sub_fields=sub_fields,
+    )
+
+
+def check_expected_type(issues: Issues, json_: Json, expected_type: str):
+    node_name = json_.get(str(constants.SCHEMA_ORG_NAME), "<unknown node>")
+    node_type = json_.get("@type")
+    if node_type != str(expected_type):
+        issues.add_error(
+            f'"{node_name}" should have an attribute "@type": "{expected_type}". Got'
+            f" {node_type} instead."
+        )
+
+
+def json_to_nodes(issues: Issues, json_: Json, folder: epath.Path) -> Metadata:
+    file_sets: list[FileSet] = []
+    file_objects: list[FileObject] = []
+    record_sets: list[RecordSet] = []
+    params = {"issues": issues, "folder": folder}
+    json_distributions = json_.pop(str(constants.SCHEMA_ORG_DISTRIBUTION), [])
+    dataset_name = json_.get(str(constants.SCHEMA_ORG_NAME), "")
+    for json_distribution in json_distributions:
+        content_url = json_distribution.get(str(constants.SCHEMA_ORG_CONTENT_URL))
+        contained_in = json_distribution.get(str(constants.SCHEMA_ORG_CONTAINED_IN))
+        name = json_distribution.get(str(constants.SCHEMA_ORG_NAME), "")
+        if contained_in is not None and not isinstance(contained_in, list):
+            contained_in = [contained_in]
+        distribution_type = json_distribution.get("@type")
+        if distribution_type == str(constants.SCHEMA_ORG_FILE_OBJECT):
+            content_size = json_distribution.get(str(constants.SCHEMA_ORG_CONTENT_SIZE))
+            description = json_distribution.get(str(constants.SCHEMA_ORG_DESCRIPTION))
+            encoding_format = json_distribution.get(
+                str(constants.SCHEMA_ORG_ENCODING_FORMAT)
+            )
+            file_object = FileObject(
+                **params,
+                context=Context(dataset_name=dataset_name, distribution_name=name),
+                content_url=content_url,
+                content_size=content_size,
+                contained_in=contained_in,
+                description=description,
+                encoding_format=encoding_format,
+                md5=json_distribution.get(str(constants.SCHEMA_ORG_MD5)),
+                name=name,
+                sha256=json_distribution.get(str(constants.SCHEMA_ORG_SHA256)),
+                source=json_distribution.get(str(constants.ML_COMMONS_SOURCE)),
+            )
+            file_objects.append(file_object)
+        elif distribution_type == str(constants.SCHEMA_ORG_FILE_SET):
+            file_set = FileSet(
+                **params,
+                context=Context(dataset_name=dataset_name, distribution_name=name),
+                contained_in=contained_in,
+                description=json_distribution.get(
+                    str(constants.SCHEMA_ORG_DESCRIPTION)
+                ),
+                encoding_format=json_distribution.get(
+                    str(constants.SCHEMA_ORG_ENCODING_FORMAT)
+                ),
+                includes=json_distribution.get(str(constants.ML_COMMONS_INCLUDES)),
+                name=name,
+            )
+            file_sets.append(file_set)
+        else:
+            issues.add_error(
+                f'"{name}" should have an attribute "@type":'
+                f' "{str(constants.SCHEMA_ORG_FILE_OBJECT)}" or "@type":'
+                f' "{str(constants.SCHEMA_ORG_FILE_SET)}". Got'
+                f" {distribution_type} instead."
+            )
+    json_record_sets = json_.pop(str(constants.ML_COMMONS_RECORD_SET), [])
+    for json_record_set in json_record_sets:
+        record_set_name = json_record_set.get(str(constants.SCHEMA_ORG_NAME), "")
+        context = Context(dataset_name=dataset_name, record_set_name=record_set_name)
+        fields = json_record_set.pop(str(constants.ML_COMMONS_FIELD), [])
+        if isinstance(fields, dict):
+            fields = [fields]
+        fields = [new_field(issues, context, field) for field in fields]
+        json_key = json_record_set.get(str(constants.SCHEMA_ORG_KEY))
+        if isinstance(json_key, list):
+            key = tuple(json_key)
+        else:
+            key = json_key
+        data = json_record_set.get(str(constants.ML_COMMONS_DATA))
+        is_enumeration = json_record_set.get(str(constants.SCHEMA_ORG_IS_ENUMERATION))
+        check_expected_type(
+            issues, json_record_set, constants.ML_COMMONS_RECORD_SET_TYPE
+        )
+        record_set = RecordSet(
+            **params,
+            context=Context(dataset_name=dataset_name, record_set_name=record_set_name),
+            data=data,
+            description=json_record_set.get(str(constants.SCHEMA_ORG_DESCRIPTION)),
+            is_enumeration=is_enumeration,
+            key=key,
+            fields=tuple(fields),
+            name=record_set_name,
+        )
+        record_sets.append(record_set)
+    check_expected_type(issues, json_, constants.SCHEMA_ORG_DATASET)
+    metadata = Metadata(
+        **params,
+        context=Context(dataset_name=dataset_name),
+        citation=json_.get(str(constants.SCHEMA_ORG_CITATION)),
+        description=json_.get(str(constants.SCHEMA_ORG_DESCRIPTION)),
+        file_objects=tuple(file_objects),
+        file_sets=tuple(file_sets),
+        language=json_.get(str(constants.SCHEMA_ORG_LANGUAGE)),
+        license=json_.get(str(constants.SCHEMA_ORG_LICENSE)),
+        name=dataset_name,
+        record_sets=tuple(record_sets),
+        url=json_.get(str(constants.SCHEMA_ORG_URL)),
+    )
+    # Define parents
+    for node in metadata.distribution:
+        node.parents = [metadata]
+    for record_set in metadata.record_sets:
+        record_set.parents = [metadata]
+        for field in record_set.fields:
+            field.parents = [metadata, record_set]
+            for sub_field in field.sub_fields:
+                sub_field.parents = [metadata, record_set, field]
+    # Check that nodes are consistent
+    for node in metadata.nodes():
+        node.check()
+    return metadata
+
+
+def from_nodes_to_graph(metadata: Metadata) -> nx.MultiDiGraph:
+    graph = nx.MultiDiGraph()
+    # Bind graph to nodes:
+    for node in metadata.nodes():
+        node.graph = graph
+        graph.add_node(node)
+    uid_to_node = _check_no_duplicate(metadata)
+    for node in metadata.distribution:
+        if node.contained_in:
+            for uid in node.contained_in:
+                _add_edge(graph, uid_to_node, uid, node)
+    for record_set in metadata.record_sets:
+        for field in record_set.fields:
+            if record_set.data:
+                _add_edge(graph, uid_to_node, record_set.uid, field)
+            # Ici on pourrait checker que field.source != None
+            for origin in [field.source, field.references]:
+                if origin:
+                    _add_edge(graph, uid_to_node, origin.uid, field)
+            for sub_field in field.sub_fields:
+                for origin in [sub_field.source, sub_field.references]:
+                    if origin:
+                        _add_edge(graph, uid_to_node, origin.uid, sub_field)
+    # `Metadata` are used as the entry node.
+    _add_node_as_entry_node(graph, metadata)
+    return graph
 
 
 def from_json_to_rdf(data: Json) -> rdflib.Graph:
@@ -86,201 +320,54 @@ def from_json_to_rdf(data: Json) -> rdflib.Graph:
     return graph
 
 
-def _parse_node_params(
-    issues: Issues, rdf_graph: rdflib.Graph, bnode: term.BNode, no_filter: bool = False
-) -> collections.defaultdict:
-    """Recursively parses all information from a node to Croissant."""
-    node_params = collections.defaultdict(list)
-    for _, _predicate, _object in rdf_graph.triples((bnode, None, None)):
-        croissant_key: str = constants.TO_CROISSANT.get(_predicate, _predicate)
-        if _predicate == constants.ML_COMMONS_SUB_FIELD:
-            node_params["has_sub_fields"] = True
-        elif _predicate == constants.SCHEMA_ORG_CONTAINED_IN:
-            node_params[croissant_key].append(_object)
-        elif no_filter or _predicate in constants.TO_CROISSANT:
-            if isinstance(_object, term.Literal):
-                node_params[croissant_key] = str(_object)
-            elif isinstance(_object, term.URIRef):
-                node_params[croissant_key] = _object
-            elif isinstance(_object, term.BNode):
-                current_node_params = _parse_node_params(
-                    issues, rdf_graph, _object, no_filter=True
-                )
-                node_params[croissant_key].append(current_node_params)
-            else:
-                raise ValueError("Objects are either BNodes, URIRef or Literals.")
-    # Parse `source`.
-    source_field = constants.TO_CROISSANT[constants.ML_COMMONS_SOURCE]
-    if (source := node_params.get(source_field)) is not None:
-        node_params[source_field] = Source.from_json_ld(issues, source)
-    # Parse `references`.
-    references_field = constants.TO_CROISSANT[constants.ML_COMMONS_REFERENCES]
-    if (references := node_params.get(references_field)) is not None:
-        node_params[references_field] = Source.from_json_ld(issues, references)
-    # Parse `contained_in` as a tuple of str.
-    contained_in_field = constants.TO_CROISSANT[constants.SCHEMA_ORG_CONTAINED_IN]
-    if (contained_in := node_params.get(contained_in_field)) is not None:
-        node_params[contained_in_field] = tuple(str(uid) for uid in contained_in)
-    return node_params
+@dataclasses.dataclass
+class StructureGraph:
+    issues: Issues
+    graph: nx.MultiDiGraph
+    metadata: Metadata
+    filepath: epath.Path | None
 
+    def to_json(self):
+        json_ = self.metadata.to_json()
+        return _sort_dict(json_)
 
-def _parse_node(
-    issues: Issues,
-    rdf_graph: rdflib.Graph,
-    bnode: term.BNode,
-    expected_types: tuple[str, ...],
-    folder: epath.Path,
-    graph: nx.MultiDiGraph(),
-    parents: tuple[Node, ...],
-) -> Node | None:
-    node_type = rdf_graph.value(bnode, constants.RDF_TYPE)
-    if node_type is None:
-        issues.add_error('The node doesn\'t define the "@type" property.')
-        return None
-    node_type = term.URIRef(node_type)
-    rdf_to_croissant = {
-        constants.SCHEMA_ORG_DATASET: Metadata,
-        constants.SCHEMA_ORG_FILE_OBJECT: FileObject,
-        constants.SCHEMA_ORG_FILE_SET: FileSet,
-        constants.ML_COMMONS_FIELD_TYPE: Field,
-        constants.ML_COMMONS_RECORD_SET_TYPE: RecordSet,
-    }
-    if node_type not in rdf_to_croissant:
-        issues.add_error(
-            'Node should have an attribute `"@type" in'
-            f" {list(rdf_to_croissant.keys())}. Got {node_type} instead."
-        )
-        return None
-    node_cls = rdf_to_croissant[node_type]
-    if node_type not in expected_types:
-        issues.add_error(
-            f'Node should have an attribute `"@type" in {expected_types}. Got'
-            f" {node_type} instead."
-        )
-        return None
-    node_params = _parse_node_params(issues, rdf_graph, bnode)
-    # Only keep relevant field for the dataclass.
-    # TODO(https://github.com/mlcommons/croissant/issues/148): find a way to remove
-    # this part of the code.
-    cls_fields = [field.name for field in dataclasses.fields(node_cls)]
-    node_params = {k: v for k, v in node_params.items() if k in cls_fields}
-    return node_cls(
-        issues=issues,
-        bnode=bnode,
-        folder=folder,
-        graph=graph,
-        parents=parents,
-        **node_params,
-    )
+    def to_jsonld(self):
+        json_ = self.to_json()
+        return expand_json_ld(json_)
 
+    @classmethod
+    def from_json(
+        cls, issues: Issues, json_: Json, filepath: epath.Path | None = None
+    ) -> StructureGraph:
+        folder = filepath.parent
+        metadata = json_to_nodes(issues, json_, folder)
+        graph = from_nodes_to_graph(metadata)
+        return cls(issues=issues, graph=graph, metadata=metadata, filepath=filepath)
 
-def _parse_children(
-    issues: Issues,
-    rdf_graph: rdflib.Graph,
-    expected_property: str,
-    expected_types: tuple[str, ...],
-    folder: epath.Path,
-    graph: nx.MultiDiGraph,
-    parents: tuple[Node, ...],
-) -> list[Node]:
-    children: list[Node] = []
-    if len(parents) == 0:
-        raise ValueError("This function should not be used on metadata.")
-    parent = parents[-1]
-    for _, _, _object in rdf_graph.triples((parent.bnode, expected_property, None)):
-        node = _parse_node(
-            issues, rdf_graph, _object, expected_types, folder, graph, parents
-        )
-        if node is not None:
-            children.append(node)
-    return children
+    @classmethod
+    def from_file(cls, issues: Issues, file: epath.PathLike) -> StructureGraph:
+        filepath, jsonld = from_file_to_jsonld(file)
+        json_ = from_jsonld_to_json(jsonld)
+        return cls.from_json(issues, json_, filepath=filepath)
 
+    def check_graph(self):
+        """Checks the integrity of the structure graph.
 
-def from_rdf_to_nodes(
-    issues: Issues, rdf_graph: rdflib.Graph, folder: epath.Path
-) -> nx.MultiDiGraph:
-    """Converts the RDF graph to a list of Python-readable nodes.
+        The rules are the following:
+        - The graph is directed.
+        - All fields have a data type: either directly specified, or on a parent.
 
-    Args:
-        issues: The issues to populate in case of problem.
-        graph: The RDF graph with expanded properties.
-        folder: The path to the folder of the Croissant file.
-
-    Returns:
-        The structure graph with only nodes and without edges.
-    """
-    graph = nx.MultiDiGraph()
-    entry_nodes = rdf_graph.subjects(
-        predicate=constants.RDF_TYPE, object=constants.SCHEMA_ORG_DATASET
-    )
-    metadata_bnode = next(entry_nodes, None)
-    if not metadata_bnode:
-        return graph
-    metadata = _parse_node(
-        issues=issues,
-        rdf_graph=rdf_graph,
-        bnode=metadata_bnode,
-        expected_types=(constants.SCHEMA_ORG_DATASET,),
-        folder=folder,
-        graph=graph,
-        parents=(),
-    )
-    if metadata is None:
-        return graph
-    graph.add_node(metadata)
-    distributions = _parse_children(
-        issues=issues,
-        rdf_graph=rdf_graph,
-        expected_property=constants.SCHEMA_ORG_DISTRIBUTION,
-        expected_types=(
-            constants.SCHEMA_ORG_FILE_OBJECT,
-            constants.SCHEMA_ORG_FILE_SET,
-        ),
-        folder=folder,
-        graph=graph,
-        parents=(metadata,),
-    )
-    record_sets = _parse_children(
-        issues=issues,
-        rdf_graph=rdf_graph,
-        expected_property=constants.ML_COMMONS_RECORD_SET,
-        expected_types=(constants.ML_COMMONS_RECORD_SET_TYPE,),
-        folder=folder,
-        graph=graph,
-        parents=(metadata,),
-    )
-
-    for distribution in distributions:
-        graph.add_node(distribution)
-    for record_set in record_sets:
-        graph.add_node(record_set)
-    for record_set in record_sets:
-        fields = _parse_children(
-            issues=issues,
-            rdf_graph=rdf_graph,
-            expected_property=constants.ML_COMMONS_FIELD,
-            expected_types=(constants.ML_COMMONS_FIELD_TYPE,),
-            folder=folder,
-            graph=graph,
-            parents=(metadata, record_set),
-        )
+        Args:
+            issues: The issues to populate in case of problem.
+            graph: The structure graph to be checked.
+        """
+        # Check that the graph is directed.
+        if not self.graph.is_directed():
+            self.issues.add_error("The structure graph is not directed.")
+        fields = [node for node in self.graph.nodes if isinstance(node, Field)]
+        # Check all fields have a data type: either on the field, on a parent.
         for field in fields:
-            graph.add_node(field)
-            sub_fields = _parse_children(
-                issues=issues,
-                rdf_graph=rdf_graph,
-                expected_property=constants.ML_COMMONS_SUB_FIELD,
-                expected_types=(constants.ML_COMMONS_FIELD_TYPE,),
-                folder=folder,
-                graph=graph,
-                parents=(metadata, record_set, field),
-            )
-            for sub_field in sub_fields:
-                graph.add_node(sub_field)
-    node: Node
-    for node in graph.nodes:
-        node.check()
-    return graph
+            field.actual_data_type
 
 
 def get_entry_nodes(graph: nx.MultiDiGraph) -> list[Node]:
@@ -292,7 +379,7 @@ def get_entry_nodes(graph: nx.MultiDiGraph) -> list[Node]:
     # Fields should usually not be entry nodes, except if they have subFields. So we
     # check for this:
     for node in entry_nodes:
-        if isinstance(node, Field) and not node.has_sub_fields and not node.data:
+        if isinstance(node, Field) and not node.sub_fields and not node.data:
             if not node.source:
                 node.add_error(
                     f'Node "{node.uid}" is a field and has no source. Please, use'
@@ -311,11 +398,10 @@ def get_entry_nodes(graph: nx.MultiDiGraph) -> list[Node]:
     return entry_nodes
 
 
-def _check_no_duplicate(graph: nx.MultiDiGraph) -> dict[str, Node]:
+def _check_no_duplicate(metadata: Metadata) -> dict[str, Node]:
     """Checks that no node has duplicated UID and returns the mapping `uid`->`Node`."""
     uid_to_node: dict[str, Node] = {}
-    node: Node
-    for node in graph.nodes:
+    for node in metadata.nodes():
         if node.uid in uid_to_node:
             node.add_error(
                 f"Duplicate nodes with the same identifier: {uid_to_node[node.uid].uid}"
@@ -334,98 +420,16 @@ def _add_node_as_entry_node(graph: nx.MultiDiGraph, node: Node):
 
 
 def _add_edge(
-    issues: Issues,
     graph: nx.MultiDiGraph,
     uid_to_node: dict[str, Node],
     uid: str,
     node: Node,
-    expected_types: NodeType | tuple[NodeType, ...],
 ):
     """Adds an edge in the structure graph."""
     if uid not in uid_to_node:
-        issues.add_error(
+        node.add_error(
             f'There is a reference to node named "{uid}" in node "{node.uid}", but this'
             " node doesn't exist."
         )
         return
-    if not isinstance(uid_to_node[uid], expected_types):
-        issues.add_error(
-            f'There is a reference to node named "{uid}" in node "{node.uid}", but this'
-            f" node doesn't have the expected type: {expected_types}."
-        )
-        return
     graph.add_edge(uid_to_node[uid], node)
-
-
-def from_nodes_to_structure_graph(
-    issues: Issues, graph: nx.MultiDiGraph
-) -> tuple[Metadata | None, nx.MultiDiGraph]:
-    """Populates the structure graph from the list of node with the proper edges.
-
-    In the structure graph:
-    - Nodes are Metadata, FileObjects, FileSets and Fields.
-    - Nodes must have a parent property, which is their direct parent in the Croissant
-      JSON.
-    - Nodes can have predecessor which is the source where data comes from. I.e., for
-      a field, the source of the data or a join, etc.
-
-    Args:
-        issues: The issues to populate in case of problem.
-        graph: The structure graph without edges.
-
-    Returns:
-        The structure graph with the proper hierarchy.
-    """
-    uid_to_node = _check_no_duplicate(graph)
-    metadata = None
-    node: Node
-    for node in graph.nodes:
-        # Metadata
-        if isinstance(node, Metadata):
-            metadata = node
-            continue
-        if not node.parents:
-            raise ValueError("Non metadata nodes always have at least one parent.")
-        # Distribution
-        if isinstance(node, (FileObject, FileSet)) and node.contained_in:
-            for uid in node.contained_in:
-                _add_edge(issues, graph, uid_to_node, uid, node, (FileObject, FileSet))
-        # Fields
-        elif isinstance(node, Field):
-            # The source can be embedded with in-line data in the parent record set.
-            if node.data:
-                parent = node.parents[-1]
-                _add_edge(issues, graph, uid_to_node, parent.uid, node, RecordSet)
-            for origin in [node.source, node.references]:
-                uid = origin.uid
-                if uid in uid_to_node:
-                    _add_edge(issues, graph, uid_to_node, uid, node, Node)
-    # `Metadata` are used as the entry node.
-    if metadata is None:
-        issues.add_error(
-            "No metadata is defined in the dataset. Make sure you defined a node with"
-            f" @type={constants.SCHEMA_ORG_DATASET}."
-        )
-        return metadata, graph
-    _add_node_as_entry_node(graph, metadata)
-    return metadata, graph
-
-
-def check_structure_graph(issues: Issues, graph: nx.MultiDiGraph):
-    """Checks the integrity of the structure graph.
-
-    The rules are the following:
-    - The graph is directed.
-    - All fields have a data type: either directly specified, or on a parent.
-
-    Args:
-        issues: The issues to populate in case of problem.
-        graph: The structure graph to be checked.
-    """
-    # Check that the graph is directed.
-    if not graph.is_directed():
-        issues.add_error("The structure graph is not directed.")
-    fields = [node for node in graph.nodes if isinstance(node, Field)]
-    # Check all fields have a data type: either on the field, on a parent.
-    for field in fields:
-        field.data_type

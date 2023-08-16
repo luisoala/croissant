@@ -15,36 +15,37 @@ from ml_croissant._src.operation_graph import OperationGraph
 from ml_croissant._src.operation_graph.operations import GroupRecordSet
 from ml_croissant._src.operation_graph.operations import ReadField
 from ml_croissant._src.operation_graph.operations.download import execute_downloads
-from ml_croissant._src.structure_graph.graph import check_structure_graph
-from ml_croissant._src.structure_graph.graph import from_file_to_json
-from ml_croissant._src.structure_graph.graph import from_json_to_rdf
-from ml_croissant._src.structure_graph.graph import from_nodes_to_structure_graph
-from ml_croissant._src.structure_graph.graph import from_rdf_to_nodes
+from ml_croissant._src.structure_graph.graph import StructureGraph
+from ml_croissant._src.structure_graph.nodes.metadata import Metadata
 
 
 @dataclasses.dataclass
-class Validator:
+class Verifier:
     """Static analysis of the issues in the Croissant file."""
 
-    file_or_file_path: epath.PathLike
+    filepath: epath.PathLike
     issues: Issues = dataclasses.field(default_factory=Issues)
-    file: dict = dataclasses.field(init=False)
-    operations: OperationGraph | None = None
+    structure: StructureGraph = dataclasses.field(init=False)
+    operations: OperationGraph = dataclasses.field(init=False)
 
     def run_static_analysis(self, debug: bool = False):
         """Runs the static analysis on the file."""
         try:
-            file_path, self.file = from_file_to_json(self.file_or_file_path)
-            folder = file_path.parent
-            json_ld = from_json_to_rdf(self.file)
-            graph = from_rdf_to_nodes(self.issues, json_ld, folder)
+            self.structure = StructureGraph.from_file(
+                issues=self.issues, file=self.filepath
+            )
+            filepath, graph, metadata = (
+                self.structure.filepath,
+                self.structure.graph,
+                self.structure.metadata,
+            )
+            folder = filepath.parent
             # Print all nodes for debugging purposes.
             if debug:
                 logging.info("Found the following nodes during static analysis.")
                 for node in graph.nodes:
                     logging.info(node)
-            metadata, graph = from_nodes_to_structure_graph(self.issues, graph)
-            check_structure_graph(self.issues, graph)
+            self.structure.check_graph()
             # Draw the structure graph for debugging purposes.
             if debug:
                 graphs_utils.pretty_print_graph(graph, simplify=True)
@@ -52,7 +53,7 @@ class Validator:
                 issues=self.issues,
                 metadata=metadata,
                 graph=graph,
-                folder=file_path.parent,
+                folder=folder,
             )
             self.operations.check_graph()
         except Exception as exception:
@@ -76,15 +77,16 @@ class Dataset:
     """
 
     file: epath.PathLike
-    operations: OperationGraph | None = None
+    operations: OperationGraph = dataclasses.field(init=False)
+    metadata: Metadata = dataclasses.field(init=False)
     debug: bool = False
 
     def __post_init__(self):
         """Runs the static analysis of `file`."""
-        self.validator = Validator(self.file)
-        self.validator.run_static_analysis(debug=self.debug)
-        self.file = self.validator.file
-        self.operations = self.validator.operations
+        self.verifier = Verifier(self.file)
+        self.verifier.run_static_analysis(debug=self.debug)
+        self.metadata = self.verifier.structure.metadata
+        self.operations = self.verifier.operations
 
     def records(self, record_set: str) -> Records:
         """Accesses all records belonging to the RecordSet named `record_set`."""
