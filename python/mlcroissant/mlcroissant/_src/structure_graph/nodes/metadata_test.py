@@ -2,15 +2,18 @@
 
 import copy
 import datetime
+from typing import Any
 from unittest import mock
 
 import pytest
+from rdflib.namespace import SDO
 
 from mlcroissant._src.core import constants
 from mlcroissant._src.core.context import Context
 from mlcroissant._src.core.context import CroissantVersion
 from mlcroissant._src.core.issues import ValidationError
 from mlcroissant._src.structure_graph.base_node import Node
+from mlcroissant._src.structure_graph.nodes.creative_work import CreativeWork
 from mlcroissant._src.structure_graph.nodes.metadata import Metadata
 from mlcroissant._src.structure_graph.nodes.record_set import RecordSet
 from mlcroissant._src.tests.nodes import create_test_node
@@ -35,22 +38,31 @@ def test_checks_are_performed():
 
 
 @parametrize_conforms_to()
-def test_from_jsonld(conforms_to: CroissantVersion):
+@pytest.mark.parametrize("version", [1, 1.0, "1.0.0"])
+def test_from_jsonld(conforms_to: CroissantVersion, version: Any):
     ctx = Context(conforms_to=conforms_to)
     jsonld = {
         "@type": constants.SCHEMA_ORG_DATASET,
         constants.SCHEMA_ORG_NAME: "foo",
         constants.SCHEMA_ORG_DESCRIPTION: "bar",
+        constants.ML_COMMONS_CITE_AS(ctx): "bixtex: citation",
         constants.DCTERMS_CONFORMS_TO: conforms_to.value,
         # Dates can be datetimes...
-        constants.SCHEMA_ORG_DATE_CREATED: datetime.datetime(1990, 2, 1, 0, 0),
+        constants.SCHEMA_ORG_DATE_CREATED: "1990-02-01",
         # ...or dates can be string...
         constants.SCHEMA_ORG_DATE_MODIFIED: "1990-02-02",
         # ...or dates can be datetime.dates.
-        constants.SCHEMA_ORG_DATE_PUBLISHED: datetime.date(1990, 2, 3),
-        constants.SCHEMA_ORG_LICENSE: "License",
+        constants.SCHEMA_ORG_DATE_PUBLISHED: "1990-02-03",
+        constants.SCHEMA_ORG_LICENSE: [
+            {
+                "@type": SDO.CreativeWork,
+                SDO.name: "U.S. Government Works",
+                SDO.url: "https://www.usa.gov/government-works/",
+            },
+            "License",
+        ],
         constants.SCHEMA_ORG_URL: "https://mlcommons.org",
-        constants.SCHEMA_ORG_VERSION: "1.0.0",
+        constants.SCHEMA_ORG_VERSION: version,
         constants.ML_COMMONS_IS_LIVE_DATASET(ctx): False,
     }
     metadata = Metadata.from_jsonld(ctx, jsonld)
@@ -59,11 +71,16 @@ def test_from_jsonld(conforms_to: CroissantVersion):
     assert metadata.date_created == datetime.datetime(1990, 2, 1, 0, 0)
     assert metadata.date_modified == datetime.datetime(1990, 2, 2, 0, 0)
     assert metadata.date_published == datetime.datetime(1990, 2, 3, 0, 0)
-    assert metadata.license == ["License"]
-    assert metadata.is_live_dataset == False
+    assert len(metadata.license) == 2
+    assert isinstance(metadata.license[0], CreativeWork)
+    assert metadata.license[0].name == "U.S. Government Works"
+    assert metadata.license[0].url == "https://www.usa.gov/government-works/"
+    assert metadata.license[1] == "License"
+    assert metadata.ctx.is_live_dataset == False
     assert metadata.url == "https://mlcommons.org"
     assert metadata.version == "1.0.0"
     assert not ctx.issues.errors
+    assert not ctx.issues.warnings
 
 
 @pytest.mark.parametrize(
@@ -144,8 +161,8 @@ def test_metadata_can_be_deep_copied():
 
 def test_validate_license():
     # Disabling PyType in case someone doesn't use PyType.
-    assert Metadata(name="foo").license == None
-    assert Metadata(name="foo", license=None).license == None
+    assert Metadata(name="foo").license is None
+    assert Metadata(name="foo", license=None).license is None
     assert Metadata(name="foo", license="mit").license == [
         "mit"
     ]  # pytype: disable=wrong-arg-types

@@ -68,15 +68,10 @@ def test_invalid_data(data, error):
 def test_checks_are_performed(conforms_to, field_uuid):
     with mock.patch.object(
         Node, "assert_has_mandatory_properties"
-    ) as mandatory_mock, mock.patch.object(
-        Node, "assert_has_optional_properties"
-    ) as optional_mock, mock.patch.object(
-        Node, "validate_name"
-    ) as validate_name_mock:
+    ) as mandatory_mock, mock.patch.object(Node, "validate_name") as validate_name_mock:
         ctx = Context(conforms_to=conforms_to)
         create_test_node(RecordSet, ctx=ctx)
         mandatory_mock.assert_called_once_with(field_uuid)
-        optional_mock.assert_called_once_with("description")
         validate_name_mock.assert_called_once()
 
 
@@ -114,12 +109,12 @@ def test_from_jsonld(conforms_to: CroissantVersion):
     ["node_type", "uuid", "parent_uuid", "input", "output"],
     [
         [RecordSet, "foo", "other", "foo", "foo"],
-        [Field, "foo/bar", "foo", "bar", "foo"],
+        [Field, "foo/bar", "foo", "foo/bar", "foo"],
     ],
 )
 def test_get_parent_uuid(node_type, uuid, parent_uuid, input, output):
     mocked_node = mock.Mock(uuid=uuid, spec_set=node_type)
     mocked_node.parent.uuid = parent_uuid
     mocked_ctx = Context()
-    mocked_ctx.node_by_uuid = mock.Mock(return_value=mocked_node)
+    mocked_ctx.graph.nodes = lambda: [mocked_node]
     assert get_parent_uuid(mocked_ctx, input) == output

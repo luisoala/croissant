@@ -7,6 +7,7 @@ import os
 from etils import epath
 import rdflib
 from rdflib import namespace
+from rdflib import term
 
 # MLCommons-defined URIs.
 ML_COMMONS_V_0_8 = rdflib.Namespace("http://mlcommons.org/schema/")
@@ -26,13 +27,17 @@ def ML_COMMONS(ctx) -> rdflib.Namespace:
         return ML_COMMONS_V_1_0
 
 
-ML_COMMONS_CITE_AS = lambda ctx: ML_COMMONS(ctx).citeAs
+ML_COMMONS_CITE_AS = lambda ctx: (
+    SCHEMA_ORG_CITATION if ctx.is_v0() else ML_COMMONS(ctx).citeAs
+)
 ML_COMMONS_COLUMN = lambda ctx: ML_COMMONS(ctx).column
 ML_COMMONS_DATA = lambda ctx: ML_COMMONS(ctx).data
 ML_COMMONS_DATA_BIASES = lambda ctx: ML_COMMONS(ctx).dataBiases
 ML_COMMONS_DATA_COLLECTION = lambda ctx: ML_COMMONS(ctx).dataCollection
 ML_COMMONS_DATA_TYPE = lambda ctx: ML_COMMONS(ctx).dataType
 ML_COMMONS_DATA_TYPE_BOUNDING_BOX = lambda ctx: ML_COMMONS(ctx).BoundingBox
+ML_COMMONS_EQUIVALENT_PROPERTY = lambda ctx: ML_COMMONS(ctx).equivalentProperty
+ML_COMMONS_EXAMPLES = lambda ctx: ML_COMMONS(ctx).examples
 ML_COMMONS_EXCLUDES = lambda ctx: ML_COMMONS(ctx).excludes
 ML_COMMONS_EXTRACT = lambda ctx: ML_COMMONS(ctx).extract
 ML_COMMONS_FILE_PROPERTY = lambda ctx: ML_COMMONS(ctx).fileProperty
@@ -70,26 +75,24 @@ RAI = rdflib.Namespace("http://mlcommons.org/croissant/RAI/")
 # Attributes
 ML_COMMONS_RAI_DATA_COLLECTION = RAI.dataCollection
 ML_COMMONS_RAI_DATA_COLLECTION_TYPE = RAI.dataCollectionType
-ML_COMMONS_RAI_DATA_COLLECTION_TYPE_OTHERS = RAI.dataCollectionTypeOthers
-ML_COMMONS_RAI_DATA_COLLECTION_MISSING = RAI.dataCollectionMissing
-ML_COMMONS_RAI_DATA_COLLECTION_RAW = RAI.dataCollectionRaw
-ML_COMMONS_RAI_DATA_COLLECTION_TIMEFRAME_START = RAI.dataCollectionTimeFrameStart
-ML_COMMONS_RAI_DATA_COLLECTION_TIMEFRAME_END = RAI.dataCollectionTimeFrameEnd
-ML_COMMONS_RAI_DATA_PREPROCESSING_IMPUTATION = RAI.dataPreprocessingImputation
-ML_COMMONS_RAI_DATA_PREPROCESSING_PROTOCOL = RAI.dataPeprocessingProtocol
-ML_COMMONS_RAI_DATA_PREPROCESSING_MANIPULATION = RAI.dataPreprocessingManipulation
+ML_COMMONS_RAI_DATA_COLLECTION_MISSING_DATA = RAI.dataCollectionMissingData
+ML_COMMONS_RAI_DATA_COLLECTION_RAW_DATA = RAI.dataCollectionRawData
+ML_COMMONS_RAI_DATA_COLLECTION_TIME_FRAME = RAI.dataCollectionTimeFrame
+ML_COMMONS_RAI_DATA_IMPUTATION_PROTOCOL = RAI.dataImputationProtocol
+ML_COMMONS_RAI_DATA_PREPROCESSING_PROTOCOL = RAI.dataPreprocessingProtocol
+ML_COMMONS_RAI_DATA_DATA_MANIPULATION_PROTOCOL = RAI.dataDataManipulationProtocol
 ML_COMMONS_RAI_DATA_ANNOTATION_PROTOCOL = RAI.dataAnnotationProtocol
 ML_COMMONS_RAI_DATA_ANNOTATION_PLATFORM = RAI.dataAnnotationPlatform
 ML_COMMONS_RAI_DATA_ANNOTATION_ANALYSIS = RAI.dataAnnotationAnalysis
-ML_COMMONS_RAI_DATA_ANNOTATION_PER_ITEM = RAI.dataAnnotationPerItem
-ML_COMMONS_RAI_DATA_ANNOTATION_DEMOGRAPHICS = RAI.dataAnnotationDemographics
-ML_COMMONS_RAI_DATA_ANNOTATION_TOOLS = RAI.dataAnnotationTools
+ML_COMMONS_RAI_ANNOTATIONS_PER_ITEM = RAI.annotationsPerItem
+ML_COMMONS_RAI_ANNOTATOR_DEMOGRAPHICS = RAI.annotatorDemographics
+ML_COMMONS_RAI_MACHINE_ANNOTATION_TOOLS = RAI.machineAnnotationTools
 ML_COMMONS_RAI_DATA_USE_CASES = RAI.dataUseCases
 ML_COMMONS_RAI_DATA_BIASES = RAI.dataBiases
-ML_COMMONS_RAI_DATA_LIMITATION = RAI.dataLimitation
+ML_COMMONS_RAI_DATA_LIMITATIONS = RAI.dataLimitations
 ML_COMMONS_RAI_DATA_SOCIAL_IMPACT = RAI.dataSocialImpact
-ML_COMMONS_RAI_DATA_SENSITIVE = RAI.dataSensitive
-ML_COMMONS_RAI_DATA_MAINTENANCE = RAI.dataMaintenance
+ML_COMMONS_RAI_PERSONAL_SENSITIVE_INFORMATION = RAI.personalSensitiveInformation
+ML_COMMONS_RAI_DATA_RELEASE_MAINTENANCE_PLAN = RAI.dataReleaseMaintenancePlan
 
 # RDF standard URIs.
 # For "@type" key:
@@ -100,7 +103,7 @@ DCTERMS = "http://purl.org/dc/terms/"
 DCTERMS_CONFORMS_TO = namespace.DCTERMS.conformsTo
 
 # Schema.org standard URIs.
-SCHEMA_ORG_CITATION = namespace.SDO.citation
+SCHEMA_ORG_CITATION: term.URIRef = namespace.SDO.citation
 SCHEMA_ORG_CONTAINED_IN = namespace.SDO.containedIn
 SCHEMA_ORG_CONTENT_SIZE = namespace.SDO.contentSize
 SCHEMA_ORG_CONTENT_URL = namespace.SDO.contentUrl
@@ -160,7 +163,6 @@ TO_CROISSANT = lambda ctx: {
     ML_COMMONS_SOURCE(ctx): "source",
     ML_COMMONS_TRANSFORM(ctx): "transforms",
     DCTERMS_CONFORMS_TO: "conforms_to",
-    SCHEMA_ORG_CITATION: "citation",
     SCHEMA_ORG_CONTAINED_IN: "contained_in",
     SCHEMA_ORG_CONTENT_SIZE: "content_size",
     SCHEMA_ORG_CONTENT_URL: "content_url",

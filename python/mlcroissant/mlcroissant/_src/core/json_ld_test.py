@@ -21,6 +21,7 @@ def test_expand_and_reduce_json_ld(version):
     paths = [path for path in dataset_folder.glob("*/*.json")]
     assert paths, f"Warning: Checking an empty list of paths: {dataset_folder}"
     for path in paths:
+        print(f"Test for {path}")
         with path.open() as f:
             expected = json.load(f)
         dataset = Dataset(path)
@@ -41,6 +42,7 @@ def test_make_context():
         "data": {"@id": "cr:data", "@type": "@json"},
         "dataType": {"@id": "cr:dataType", "@type": "@vocab"},
         "dct": "http://purl.org/dc/terms/",
+        "examples": {"@id": "cr:examples", "@type": "@json"},
         "extract": "cr:extract",
         "field": "cr:field",
         "fileProperty": "cr:fileProperty",
@@ -48,7 +50,6 @@ def test_make_context():
         "fileSet": "cr:fileSet",
         "format": "cr:format",
         "includes": "cr:includes",
-        "isEnumeration": "cr:isEnumeration",
         "isLiveDataset": "cr:isLiveDataset",
         "jsonPath": "cr:jsonPath",
         "key": "cr:key",

@@ -1,19 +1,23 @@
 """Base node module."""
 
-from __future__ import annotations
-
-import abc
 import dataclasses
+import inspect
 import re
-from typing import Any
+from typing import Any, Callable
+
+from rdflib import term
+from rdflib.namespace import SDO
 
 from mlcroissant._src.core import constants
+from mlcroissant._src.core import dataclasses as mlc_dataclasses
 from mlcroissant._src.core.context import Context
+from mlcroissant._src.core.context import CroissantVersion
 from mlcroissant._src.core.data_types import check_expected_type
-from mlcroissant._src.core.dataclasses import jsonld_fields
 from mlcroissant._src.core.issues import Issues
+from mlcroissant._src.core.issues import WarningException
 from mlcroissant._src.core.json_ld import box_singleton_list
 from mlcroissant._src.core.json_ld import remove_empty_values
+from mlcroissant._src.core.json_ld import sort_dict
 from mlcroissant._src.core.json_ld import unbox_singleton_list
 from mlcroissant._src.core.types import Json
 from mlcroissant._src.core.uuid import generate_uuid
@@ -21,10 +25,23 @@ from mlcroissant._src.core.uuid import uuid_from_jsonld
 
 NAME_REGEX = "[a-zA-Z0-9\\-_\\.]+"
 _MAX_NAME_LENGTH = 255
+# This could also be an attribute of JsonldField:
+_LIST_FIELDS = {"distribution", "fields", "record_sets"}
+_MISSING_JSONLD_TYPE = "__MISSING_JSONLD_TYPE__"
+MATCHING_TYPES = {
+    SDO.Boolean: bool,
+    SDO.Date: str,
+    SDO.DateTime: str,
+    SDO.Integer: int,
+    SDO.Number: float,
+    SDO.Text: str,
+    SDO.Time: str,
+    SDO.URL: str,
+}
 
 
 @dataclasses.dataclass(eq=False, repr=False)
-class Node(abc.ABC):
+class Node:
     """Structure node in Croissant.
 
     This generic class will be inherited by the actual Croissant nodes:
@@ -45,13 +62,27 @@ class Node(abc.ABC):
 
     ctx: Context = dataclasses.field(default_factory=Context)
     id: str = dataclasses.field(default_factory=generate_uuid)
-    name: str = ""
-    parents: list[Node] = dataclasses.field(default_factory=list)
+    name: str | None = None
+    parents: list["Node"] = dataclasses.field(default_factory=list)
+    jsonld: Any = None
 
     def __post_init__(self):
-        """Checks for common properties between all nodes."""
-        uuid_field = "name" if self.ctx.is_v0() else "id"
-        self.assert_has_mandatory_properties(uuid_field)
+        """Checks exclusive properties."""
+        self._cast_fields()
+        self._check_exclusive_properties()
+
+    def _cast_fields(self):
+        """Applies all `field.cast_fn`."""
+        for field in mlc_dataclasses.jsonld_fields(self):
+            if field.cast_fn:
+                try:
+                    value = getattr(self, field.name)
+                    new_value = field.cast_fn(value)
+                    setattr(self, field.name, new_value)
+                except WarningException as e:
+                    self.add_warning(repr(e))
+                except Exception as e:
+                    self.add_error(repr(e))
 
     def assert_has_mandatory_properties(self, *mandatory_properties: str):
         """Checks a node in the graph for existing properties with constraints.
@@ -120,6 +151,27 @@ class Node(abc.ABC):
                 )
                 self.add_error(error)
 
+    def _check_exclusive_properties(self):
+        """Checks exclusive properties on the node."""
+        fields = {field.name: field for field in mlc_dataclasses.jsonld_fields(self)}
+        for field in mlc_dataclasses.jsonld_fields(self):
+            exclusive_with = field.exclusive_with
+            if field.name in field.exclusive_with:
+                raise ValueError(f'"{field.name}" appears in its own in exclusive_with')
+            if field.exclusive_with:
+                exclusive_fields = [field] + [
+                    fields[name] for name in exclusive_with if name in fields
+                ]
+                properties = [getattr(self, field.name) for field in exclusive_fields]
+                has_exactly_one_property = sum(bool(p) for p in properties) == 1
+                if not has_exactly_one_property:
+                    urls = [str(field.call_url(self.ctx)) for field in exclusive_fields]
+                    name = self._jsonld_type(self.ctx) or self.__class__.__name__
+                    self.ctx.issues.add_error(
+                        f"{name} should have one of the following properties"
+                        f" {' or '.join(urls)}."
+                    )
+
     def get_issue_context(self) -> str:
         """Adds context to an issue by printing metadata(...) > ... > field(...)."""
         nodes = self.parents + [self]
@@ -147,25 +199,25 @@ class Node(abc.ABC):
         """
         if self.ctx.is_v0():
             if len(self.parents) <= 1:
-                return self.name
+                return self.name or ""
             return f"{self.parents[-1].uuid}/{self.name}"
         else:
             return self.id
 
     @property
-    def parent(self) -> Node | None:
+    def parent(self) -> "Node | None":
         """Direct parent of the node or None if no parent."""
         if not self.parents:
             return None
         return self.parents[-1]
 
     @property
-    def predecessors(self) -> set[Node]:
+    def predecessors(self) -> set["Node"]:
         """Predecessors in the structure graph."""
-        return set(self.ctx.graph.predecessors(self))
+        return set(self.ctx.graph.predecessors(self))  # pytype: disable=bad-return-type
 
     @property
-    def recursive_predecessors(self) -> set[Node]:
+    def recursive_predecessors(self) -> set["Node"]:
         """Predecessors and predecessors of predecessors in the structure graph."""
         predecessors = set()
         for predecessor in self.predecessors:
@@ -174,23 +226,25 @@ class Node(abc.ABC):
         return predecessors
 
     @property
-    def predecessor(self) -> Node | None:
+    def predecessor(self) -> "Node | None":
         """First predecessor in the structure graph."""
         if not self.ctx.graph.has_node(self):
             return None
-        return next(self.ctx.graph.predecessors(self), None)
+        return next(
+            self.ctx.graph.predecessors(self), None
+        )  # pytype: disable=bad-return-type
 
     @property
-    def successors(self) -> tuple[Node, ...]:
+    def successors(self) -> tuple["Node", ...]:
         """Successors in the structure graph."""
         if self not in self.ctx.graph:
             return ()
         # We use tuples in order to have a hashable data structure to be put in input of
         # operations.
-        return tuple(self.ctx.graph.successors(self))
+        return tuple(self.ctx.graph.successors(self))  # pytype: disable=bad-return-type
 
     @property
-    def recursive_successors(self) -> set[Node]:
+    def recursive_successors(self) -> set["Node"]:
         """Successors and successors of successors in the structure graph."""
         successors = set()
         for successor in self.successors:
@@ -199,27 +253,18 @@ class Node(abc.ABC):
         return successors
 
     @property
-    def successor(self) -> Node | None:
+    def successor(self) -> "Node | None":
         """Direct successor in the structure graph."""
         if not self.ctx.graph.has_node(self):
             return None
-        return next(self.ctx.graph.successors(self), None)
+        return next(
+            self.ctx.graph.successors(self), None
+        )  # pytype: disable=bad-return-type
 
     @property
     def issues(self) -> Issues:
         """Shortcut to access issues in node."""
         return self.ctx.issues
-
-    @abc.abstractmethod
-    def to_json(self) -> Json:
-        """Converts the node to JSON."""
-        ...
-
-    @classmethod
-    @abc.abstractmethod
-    def from_jsonld(cls, *args, **kwargs) -> Any:
-        """Creates a node from JSON-LD."""
-        ...
 
     def validate_name(self):
         """Validates the name."""
@@ -277,49 +322,162 @@ class Node(abc.ABC):
         memo[id(self)] = copy
         return copy
 
-
-class NodeV2(Node):
-    """Extends Node. When the migration is complete, merge `Node` and `NodeV2`."""
-
     def to_json(self) -> Json:
         """Converts the Python class to JSON."""
         cls = self.__class__
+        jsonld_type = cls._jsonld_type(self.ctx)
+        # IDs that are generated by RDFLib are not kept
+        id_by_rdflib = self.id and self.id.startswith("_:")
         jsonld = {
-            "@type": self.ctx.rdf.shorten_value(cls._JSONLD_TYPE(self.ctx)),
-            "@id": None if self.ctx.is_v0() else self.id,
+            "@type": self.ctx.rdf.shorten_value(jsonld_type) if jsonld_type else None,
+            "@id": None if self.ctx.is_v0() or id_by_rdflib else self.id,
         }
-        for field in jsonld_fields(self):
+        for field in mlc_dataclasses.jsonld_fields(self):
             url = field.call_url(self.ctx)
-            key = url.split("/")[-1]
+            key = self.ctx.rdf.shorten_key(url)
             value = getattr(self, field.name)
-            value = field.call_to_jsonld(self.ctx, value)
-            if field.cardinality == "MANY" and field.name != "fields":
+            if field.to_jsonld:
+                # We explicitly set `to_jsonld`, so use it:
+                value = field.call_to_jsonld(self.ctx, value)
+            else:
+                if isinstance(value, list):
+                    value = [_value_to_jsonld(v) for v in value]
+                else:
+                    value = _value_to_jsonld(value)
+            # fields in _LIST_FIELDS are always lists, so we don't unbox them.
+            if field.cardinality == "MANY" and field.name not in _LIST_FIELDS:
                 value = unbox_singleton_list(value)
             jsonld[key] = value
-        return remove_empty_values(jsonld)
+        jsonld = remove_empty_values(jsonld)
+        return sort_dict(jsonld)
 
     @classmethod
     def from_jsonld(cls, ctx: Context, jsonld: Json):
         """Creates a Python class from JSON-LD."""
+        if not isinstance(jsonld, list) and not isinstance(jsonld, dict):
+            name = cls._jsonld_type(ctx) or cls.__name__
+            ctx.issues.add_error(f'{name} should be a dict with keys. Got "{jsonld}"')
+            return None
+        if cls._jsonld_type(ctx) == constants.SCHEMA_ORG_DATASET:
+            # For `Metadata` node, insert conforms_to/is_live_dataset in the context:
+            ctx.conforms_to = CroissantVersion.from_jsonld(
+                ctx, jsonld.get(constants.DCTERMS_CONFORMS_TO)
+            )
+            ctx.is_live_dataset = jsonld.get(constants.ML_COMMONS_IS_LIVE_DATASET(ctx))
         if isinstance(jsonld, list):
             return [cls.from_jsonld(ctx, el) for el in jsonld]
-        check_expected_type(ctx.issues, jsonld, cls._JSONLD_TYPE(ctx))
+        check_expected_type(ctx.issues, jsonld, cls._jsonld_type(ctx))
         kwargs = {}
-        for field in jsonld_fields(cls):
+        for field in mlc_dataclasses.jsonld_fields(cls):
             url = field.call_url(ctx)
             value = jsonld.get(url)
-            value = field.call_from_jsonld(ctx, value)
-            if field.cardinality == "MANY":
-                value = box_singleton_list(value)
-            if value:
+            if field.from_jsonld:
+                # We explicitly set `from_jsonld`, so use it:
+                value = field.call_from_jsonld(ctx, value)
+            else:
+                # We can infer `from_jsonld` from the input_types:
+                if isinstance(value, list):
+                    value = [_value_from_input_types(ctx, v, field) for v in value]
+                    value = list(filter(lambda v: v != dataclasses.MISSING, value))
+                else:
+                    value = _value_from_input_types(ctx, value, field)
+            if field.cardinality == "MANY" and value:
+                value = box_singleton_list(value) if value else []
+            elif field.cardinality == "ONE" and isinstance(value, list):
+                value = value[0] if value else None
+                warning = f"`{field.name}` has cardinality `ONE`, but got a list"
+                ctx.issues.add_warning(warning)
+            if value is not None:
                 kwargs[field.name] = value
         return cls(
             ctx=ctx,
             id=uuid_from_jsonld(jsonld),
+            jsonld=jsonld,
             **kwargs,
         )
 
+    JSONLD_TYPE: Callable[[Context], term.URIRef] | term.URIRef | str | None = (
+        _MISSING_JSONLD_TYPE
+    )
+
     @classmethod
-    def _JSONLD_TYPE(cls, ctx: Context):
-        del ctx
-        raise NotImplementedError("Output the right JSON-LD type.")
+    def _jsonld_type(cls, ctx: Context):
+        """Get the actual JSON-LD type according the the ctx."""
+        if cls.JSONLD_TYPE == _MISSING_JSONLD_TYPE:
+            raise NotImplementedError("Output the right JSON-LD type.")
+        elif callable(cls.JSONLD_TYPE):
+            return cls.JSONLD_TYPE(ctx)
+        else:
+            return cls.JSONLD_TYPE
+
+
+def _value_to_jsonld(value: Any) -> Any:
+    """Applies `to_json` to Nodes."""
+    if isinstance(value, Node):
+        return value.to_json()
+    else:
+        return value
+
+
+def _value_from_input_types(
+    ctx: Context, value: Any, field: mlc_dataclasses.JsonldField
+) -> Any:
+    """Retrieves the value based on the JsonldField."""
+    if value is None:
+        return None
+    input_types = field.input_types
+    if not input_types:
+        # This is a problem in mlcroissant, so we raise an error:
+        raise ValueError(f"`{field.name}` doesn't declare any `input_types`.")
+    for input_type in input_types:
+        # Either the input_type is a Node...
+        if isinstance(value, dict) and _is_a_node(input_type):
+            jsonld_type = input_type._jsonld_type(ctx)
+            actual_jsonld_type = value.get("@type")
+            if actual_jsonld_type == jsonld_type:
+                return input_type.from_jsonld(ctx, value)
+        # ...or it's a basic int/str/bool/etc type
+        else:
+            matching_type = MATCHING_TYPES.get(input_type)
+            if type(value) is matching_type:
+                return value
+    types = [
+        input_type._jsonld_type(ctx) if _is_a_node(input_type) else str(input_type)
+        for input_type in input_types
+    ]
+    if isinstance(value, dict):
+        actual_jsonld_type = value.get("@type")
+        posible_attributes = " or ".join([f'"@type": "{type}"' for type in types])
+        if ctx.is_v0():
+            uuid = value.get(constants.SCHEMA_ORG_NAME)
+        else:
+            uuid = uuid_from_jsonld(value)
+        ctx.issues.add_error(
+            f'"{uuid}" should have an attribute {posible_attributes}. Got'
+            f" {actual_jsonld_type} instead."
+        )
+    else:
+        actual_type = type(value).__name__
+        ctx.issues.add_error(
+            f"`{field.name}` should have type {' or '.join(types)}, but got"
+            f" {actual_type}"
+        )
+    if field.default != dataclasses.MISSING:
+        # If the validation failed, we return the default value:
+        return field.default
+    elif field.default_factory != dataclasses.MISSING:
+        # For lists, we don't return field.default_factory() to not produce [[]]:
+        return dataclasses.MISSING
+    raise ValueError(f"{field.name} specifies neither default, nor default_factory")
+
+
+def _is_a_node(input_type: Any) -> bool:
+    return inspect.isclass(input_type) and issubclass(input_type, Node)
+
+
+def node_by_uuid(ctx: Context, uuid: str | None) -> Node | None:
+    """Retrieves a node in the graph by its UID."""
+    for node in ctx.graph.nodes():
+        if node.uuid == uuid:  # pytype: disable=attribute-error
+            return node  # pytype: disable=bad-return-type
+    return None

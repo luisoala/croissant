@@ -6,17 +6,20 @@
     "column": "cr:column",
     "conformsTo": "dct:conformsTo",
     "cr": "http://mlcommons.org/croissant/",
+    "rai": "http://mlcommons.org/croissant/RAI/",
     "data": {
       "@id": "cr:data",
       "@type": "@json"
     },
-    "dataBiases": "cr:dataBiases",
-    "dataCollection": "cr:dataCollection",
     "dataType": {
       "@id": "cr:dataType",
       "@type": "@vocab"
     },
     "dct": "http://purl.org/dc/terms/",
+    "examples": {
+      "@id": "cr:examples",
+      "@type": "@json"
+    },
     "extract": "cr:extract",
     "field": "cr:field",
     "fileProperty": "cr:fileProperty",
@@ -24,14 +27,12 @@
     "fileSet": "cr:fileSet",
     "format": "cr:format",
     "includes": "cr:includes",
-    "isEnumeration": "cr:isEnumeration",
     "isLiveDataset": "cr:isLiveDataset",
     "jsonPath": "cr:jsonPath",
     "key": "cr:key",
     "md5": "cr:md5",
     "parentField": "cr:parentField",
     "path": "cr:path",
-    "personalSensitiveInformation": "cr:personalSensitiveInformation",
     "recordSet": "cr:recordSet",
     "references": "cr:references",
     "regex": "cr:regex",
@@ -45,13 +46,9 @@
   },
   "@type": "sc:Dataset",
   "name": "FLORES-200",
-  "conformsTo": "http://mlcommons.org/croissant/1.0",
   "description": "FLORES-200 is an evaluation benchmark for low-resource and multilingual machine translation",
-  "citeAs": [
-    "@article{nllb2022, author={NLLB Team, Marta R. Costa-juss\u00e0, James Cross, Onur \u00c7elebi, Maha Elbayad, Kenneth Heafield, Kevin Heffernan, Elahe Kalbassi,  Janice Lam, Daniel Licht, Jean Maillard, Anna Sun, Skyler Wang, Guillaume Wenzek, Al Youngblood, Bapi Akula, Loic Barrault, Gabriel Mejia Gonzalez, Prangthip Hansanti, John Hoffman, Semarley Jarrett, Kaushik Ram Sadagopan, Dirk Rowe, Shannon Spruit, Chau Tran, Pierre Andrews, Necip Fazil Ayan, Shruti Bhosale, Sergey Edunov, Angela Fan, Cynthia Gao, Vedanuj Goswami, Francisco Guzm\u00e1n, Philipp Koehn, Alexandre Mourachko, Christophe Ropers, Safiyyah Saleem, Holger Schwenk, Jeff Wang}, title={No Language Left Behind: Scaling Human-Centered Machine Translation}, year = {2022}}",
-    "@inproceedings{flores101, title={The FLORES-101  Evaluation Benchmark for Low-Resource and Multilingual Machine Translation}, author={Goyal, Naman and Gao, Cynthia and Chaudhary, Vishrav and Chen, Peng-Jen and Wenzek, Guillaume and Ju, Da and Krishnan, Sanjana and Ranzato, Marc'Aurelio and Guzm\\'{a}n, Francisco and Fan, Angela}, year={2021}}",
-    "@inproceedings{twoeval, title={Two New Evaluation Datasets for Low-Resource Machine Translation: Nepali-English and Sinhala-English}, author={Guzm\\'{a}n, Francisco and Chen, Peng-Jen and Ott, Myle and Pino, Juan and Lample, Guillaume and Koehn, Philipp and Chaudhary, Vishrav and Ranzato, Marc'Aurelio}, journal={arXiv preprint arXiv:1902.01382}, year={2019}}"
-  ],
+  "conformsTo": "http://mlcommons.org/croissant/1.0",
+  "citeAs": "@inproceedings{flores101, title={The FLORES-101  Evaluation Benchmark for Low-Resource and Multilingual Machine Translation}, author={Goyal, Naman and Gao, Cynthia and Chaudhary, Vishrav and Chen, Peng-Jen and Wenzek, Guillaume and Ju, Da and Krishnan, Sanjana and Ranzato, Marc'Aurelio and Guzm\\'{a}n, Francisco and Fan, Angela}, year={2021}}",
   "license": "cc-by-sa-4.0",
   "url": "https://github.com/facebookresearch/flores",
   "version": "0.0.1",
@@ -82,10 +79,10 @@
       "@id": "metadata-dev",
       "name": "metadata-dev",
       "description": "Contains labels for the records in each line in the dev files.",
-      "contentUrl": "flores200_dataset/metadata_dev.tsv",
       "containedIn": {
         "@id": "tinyurl-repository"
       },
+      "contentUrl": "flores200_dataset/metadata_dev.tsv",
       "encodingFormat": "text/tab-separated-values"
     },
     {
@@ -93,10 +90,10 @@
       "@id": "metadata-devtest",
       "name": "metadata-devtest",
       "description": "Contains labels for the records in each line in the devtest files.",
-      "contentUrl": "flores200_dataset/metadata_devtest.tsv",
       "containedIn": {
         "@id": "tinyurl-repository"
       },
+      "contentUrl": "flores200_dataset/metadata_devtest.tsv",
       "encodingFormat": "text/tab-separated-values"
     },
     {

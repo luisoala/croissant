@@ -87,6 +87,59 @@ metadata=mlc.nodes.Metadata(
 metadata.to_json()  # this returns the JSON-LD file.
 ```
 
+## Add new properties to the standard
+
+Nodes (Metadata, RecordSets, etc) implement [PEP 681](https://peps.python.org/pep-0681/). So you can declare RDF triplets using the [dataclass](https://docs.python.org/3/library/dataclasses.html) syntax.
+
+**Example 1**: implement [CreativeWork](https://schema.org/CreativeWork):
+
+```python
+@mlc_dataclasses.dataclass
+class CreativeWork(Node):
+
+    JSONLD_TYPE = SDO.CreativeWork           # https://schema.org/CreativeWork
+
+    name: str | None = mlc_dataclasses.jsonld_field(
+        cardinality="ONE",                   # Cardinality can be ONE or MANY
+        default=None,                        # Specify the default value in Python
+        description="The name of the item.", # The full description
+        input_types=[SDO.Text],              # The schema.org type
+        url=SDO.name,                        # The URL of the property
+    )
+```
+
+**Example 2**: implement [RecordSet](https://mlcommons.github.io/croissant/docs/croissant-spec.html#recordset):
+
+```python
+@mlc_dataclasses.dataclass
+class RecordSet(Node):
+    JSONLD_TYPE = constants.ML_COMMONS_RECORD_SET_TYPE
+
+    fields: list[Field] = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",                  # Example with cardinality=="MANY"
+        default_factory=list,
+        description=(
+            "A data element that appears in the records of the RecordSet (e.g., one"
+            " column of a table)."
+        ),
+        input_types=[Field],                 # Types can also be other nodes (here `Field`)
+        url=constants.ML_COMMONS_FIELD,
+    )
+```
+
+**Example 3**: specify a version (by default all versions):
+
+```python
+@mlc_dataclasses.dataclass
+class Field(Node):
+    is_enumeration: bool | None = mlc_dataclasses.jsonld_field(
+        default=None,
+        input_types=[SDO.Boolean],
+        url=constants.ML_COMMONS_IS_ENUMERATION,
+        versions=[CroissantVersion.V_0_8],   # `is_enumeration` is only valid for v0.8, not v1.0
+    )
+```
+
 ## Run tests
 
 All tests can be run from the Makefile:

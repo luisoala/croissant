@@ -13,6 +13,7 @@ from mlcroissant._src.core.context import Context
 from mlcroissant._src.core.graphs import utils as graphs_utils
 from mlcroissant._src.core.issues import ValidationError
 from mlcroissant._src.operation_graph import OperationGraph
+from mlcroissant._src.operation_graph.base_operation import Operations
 from mlcroissant._src.operation_graph.execute import execute_downloads
 from mlcroissant._src.operation_graph.execute import execute_operations_in_streaming
 from mlcroissant._src.operation_graph.execute import execute_operations_sequentially
@@ -69,7 +70,6 @@ class Dataset:
             self.metadata = Metadata.from_file(ctx=ctx, file=self.jsonld)
         else:
             return
-        ctx.is_live_dataset = self.metadata.is_live_dataset
         # Draw the structure graph for debugging purposes.
         if self.debug:
             graphs_utils.pretty_print_graph(ctx.graph, simplify=True)
@@ -90,10 +90,12 @@ class Dataset:
         """Accesses all records in `record_set` if it exists."""
         if not any(rs for rs in self.metadata.record_sets if rs.name == record_set):
             names = [record_set.name for record_set in self.metadata.record_sets]
-            raise ValueError(
-                f"did not find any record set with the name {record_set}. Possible"
-                f" RecordSets: {names}"
-            )
+            error_msg = f"did not find any record set with the name `{record_set}`. "
+            if not names:
+                error_msg += "This dataset declares no record sets."
+            else:
+                error_msg += f"Possible RecordSets: {names}"
+            raise ValueError(error_msg)
         return Records(self, record_set, debug=self.debug)
 
 
@@ -138,7 +140,7 @@ class Records:
                 record_set=self.record_set, operations=operations
             )
 
-    def _filter_interesting_operations(self) -> nx.DiGraph:
+    def _filter_interesting_operations(self) -> Operations:
         """Filters connected operations to `ReadFields(self.record_set)`."""
         operations = self.dataset.operations.operations
         source = next(
@@ -154,4 +156,4 @@ class Records:
         )
         paths = nx.all_simple_paths(operations, source=source, target=target)
         interesting_nodes = {node for path in paths for node in path}
-        return operations.subgraph(interesting_nodes)
+        return operations.subgraph(interesting_nodes)  # pytype: disable=bad-return-type

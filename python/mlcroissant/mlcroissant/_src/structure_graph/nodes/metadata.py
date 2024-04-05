@@ -1,143 +1,307 @@
 """Metadata module."""
 
-from __future__ import annotations
-
-import dataclasses
 import datetime
-import itertools
-from typing import Any, Literal
 
 from etils import epath
-from rdflib import namespace
+from rdflib.namespace import SDO
 import requests
+from typing_extensions import Self
 
 from mlcroissant._src.core import constants
+from mlcroissant._src.core import dataclasses as mlc_dataclasses
 from mlcroissant._src.core.context import Context
 from mlcroissant._src.core.context import CroissantVersion
-from mlcroissant._src.core.data_types import check_expected_type
-from mlcroissant._src.core.dates import from_datetime_to_str
-from mlcroissant._src.core.dates import from_str_to_datetime
+from mlcroissant._src.core.dates import cast_date
+from mlcroissant._src.core.dates import cast_dates
 from mlcroissant._src.core.issues import ValidationError
-from mlcroissant._src.core.json_ld import box_singleton_list
 from mlcroissant._src.core.json_ld import expand_jsonld
 from mlcroissant._src.core.json_ld import remove_empty_values
-from mlcroissant._src.core.json_ld import unbox_singleton_list
+from mlcroissant._src.core.json_ld import sort_dict
 from mlcroissant._src.core.rdf import Rdf
 from mlcroissant._src.core.types import Json
 from mlcroissant._src.core.url import is_url
-from mlcroissant._src.core.uuid import uuid_from_jsonld
+from mlcroissant._src.core.versions import cast_version
 from mlcroissant._src.structure_graph.base_node import Node
 from mlcroissant._src.structure_graph.graph import from_file_to_json
 from mlcroissant._src.structure_graph.graph import from_nodes_to_graph
+from mlcroissant._src.structure_graph.nodes.creative_work import CreativeWork
 from mlcroissant._src.structure_graph.nodes.field import Field
 from mlcroissant._src.structure_graph.nodes.file_object import FileObject
 from mlcroissant._src.structure_graph.nodes.file_set import FileSet
+from mlcroissant._src.structure_graph.nodes.organization import Organization
+from mlcroissant._src.structure_graph.nodes.person import Person
 from mlcroissant._src.structure_graph.nodes.record_set import RecordSet
 
 
-@dataclasses.dataclass(eq=False, repr=False)
-class PersonOrOrganization:
-    """Representing either https://schema.org/Person or /Organization."""
-
-    name: str | None = None
-    description: str | None = None
-    email: str | None = None
-    type: (
-        Literal["https://schema.org/Person", "https://schema.org/Organization"] | None
-    ) = None
-    url: str | None = None
-
-    @classmethod
-    def from_jsonld(cls, jsonld: Any) -> list[PersonOrOrganization]:
-        """Builds the class from the JSON-LD."""
-        if jsonld is None:
-            return []
-        elif isinstance(jsonld, list):
-            persons_or_organizations: itertools.chain[PersonOrOrganization] = (
-                itertools.chain.from_iterable([
-                    cls.from_jsonld(element) for element in jsonld
-                ])
-            )
-            return list(persons_or_organizations)
-        else:
-            return [
-                cls(
-                    name=jsonld.get(constants.SCHEMA_ORG_NAME),
-                    description=jsonld.get(constants.SCHEMA_ORG_DESCRIPTION),
-                    email=jsonld.get(constants.SCHEMA_ORG_EMAIL),
-                    type=jsonld.get("@type"),
-                    url=jsonld.get(constants.SCHEMA_ORG_URL),
-                )
-            ]
-
-    @classmethod
-    def to_json(cls, creator: list[PersonOrOrganization] | None) -> Any:
-        """Serializes back to JSON-LD."""
-        if creator is None:
-            return None
-        else:
-            creators = [
-                remove_empty_values({
-                    "@type": (
-                        "Person"
-                        if element.type == namespace.SDO.Person
-                        else "Organization"
-                    ),
-                    "email": element.email,
-                    "name": element.name,
-                    "description": element.description,
-                    "url": element.url,
-                })
-                for element in creator
-            ]
-            return unbox_singleton_list(creators)
-
-
-@dataclasses.dataclass(eq=False, repr=False)
+@mlc_dataclasses.dataclass
 class Metadata(Node):
     """Nodes to describe a dataset metadata."""
 
-    cite_as: str | None = None
-    creators: list[PersonOrOrganization] | None = None
-    date_created: datetime.datetime | None = None
-    date_modified: datetime.datetime | None = None
-    date_published: datetime.datetime | None = None
-    description: str | None = None
-    is_live_dataset: bool | None = None
-    keywords: list[str] | None = None
-    license: list[str] | None = None
-    name: str = ""
-    publisher: list[PersonOrOrganization] | None = None
-    same_as: list[str] | None = None
-    url: str | None = ""
-    version: str | None = ""
-    distribution: list[FileObject | FileSet] = dataclasses.field(default_factory=list)
-    record_sets: list[RecordSet] = dataclasses.field(default_factory=list)
-    data_collection: str | None = None
-    data_collection_type: str | None = None
-    data_collection_type_others: str | None = None
-    data_collection_missing: str | None = None
-    data_collection_raw: str | None = None
-    data_collection_timeframe_start: datetime.datetime | None = None
-    data_collection_timeframe_end: datetime.datetime | None = None
-    data_preprocessing_imputation: str | None = None
-    data_preprocessing_protocol: str | None = None
-    data_preprocessing_manipulation: str | None = None
-    data_annotation_protocol: str | None = None
-    data_annotation_platform: str | None = None
-    data_annotation_analysis: str | None = None
-    data_annotation_peritem: str | None = None
-    data_annotation_demographics: str | None = None
-    data_annotation_tools: str | None = None
-    data_biases: str | None = None
-    data_usecases: str | None = None
-    data_limitation: str | None = None
-    data_social_impact: str | None = None
-    data_sensitive: str | None = None
-    data_maintenance: str | None = None
+    JSONLD_TYPE = constants.SCHEMA_ORG_DATASET
+
+    cite_as: str | None = mlc_dataclasses.jsonld_field(
+        default=None,
+        description=(
+            "A citation for a publication that describes the dataset. Ideally,"
+            " citations should be expressed using the bibtex format. Note that this is"
+            " different from schema.org/citation, which is used to make a citation to"
+            " another publication from this dataset."
+        ),
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_CITE_AS,
+    )
+    creators: list[Organization | Person] = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default_factory=list,
+        description="The creator(s) of the dataset.",
+        input_types=[Organization, Person],
+        url=constants.SCHEMA_ORG_CREATOR,
+    )
+    date_created: datetime.datetime | None = mlc_dataclasses.jsonld_field(
+        cast_fn=cast_date,
+        default=None,
+        description="The date the dataset was initially created.",
+        input_types=[SDO.Date, SDO.DateTime],
+        url=constants.SCHEMA_ORG_DATE_CREATED,
+    )
+    date_modified: datetime.datetime | None = mlc_dataclasses.jsonld_field(
+        cast_fn=cast_date,
+        default=None,
+        description="The date the dataset was last modified.",
+        input_types=[SDO.Date, SDO.DateTime],
+        url=constants.SCHEMA_ORG_DATE_MODIFIED,
+    )
+    date_published: datetime.datetime | None = mlc_dataclasses.jsonld_field(
+        cast_fn=cast_date,
+        default=None,
+        description="The date the dataset was published.",
+        input_types=[SDO.Date, SDO.DateTime],
+        url=constants.SCHEMA_ORG_DATE_PUBLISHED,
+    )
+    description: str | None = mlc_dataclasses.jsonld_field(
+        default=None,
+        description="Description of the dataset.",
+        input_types=[SDO.Text],
+        url=constants.SCHEMA_ORG_DESCRIPTION,
+    )
+    keywords: list[str] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        description=(
+            "A set of keywords associated with the dataset, either as free text, or"
+            " a DefinedTerm with a formal definition."
+        ),
+        input_types=[SDO.Text],
+        url=constants.SCHEMA_ORG_KEYWORDS,
+    )
+    in_language: list[str] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        description="The language(s) of the content of the dataset.",
+        input_types=[SDO.Language, SDO.Text],
+        url=SDO.inLanguage,
+    )
+    license: list[str | CreativeWork] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        description=(
+            "The license of the dataset. Croissant recommends using the URL of a"
+            " known license, e.g., one of the licenses listed at"
+            " https://spdx.org/licenses/."
+        ),
+        input_types=[CreativeWork, SDO.Text, SDO.URL],
+        url=constants.SCHEMA_ORG_LICENSE,
+    )
+    name: str = mlc_dataclasses.jsonld_field(
+        default="",
+        description="The name of the dataset.",
+        input_types=[SDO.Text],
+        url=constants.SCHEMA_ORG_NAME,
+    )
+    publisher: list[Organization | Person] = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default_factory=list,
+        description=(
+            "The publisher of the dataset, which may be distinct from its creator."
+        ),
+        input_types=[Organization, Person],
+        url=constants.SCHEMA_ORG_PUBLISHER,
+    )
+    same_as: list[str] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        description=(
+            "The URL of another Web resource that represents the same dataset as this"
+            " one."
+        ),
+        input_types=[SDO.URL],
+        url=constants.SCHEMA_ORG_SAME_AS,
+    )
+    sd_licence: list[str | CreativeWork] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        description=(
+            "A license document that applies to this structured data, typically"
+            " indicated by URL."
+        ),
+        input_types=[CreativeWork, SDO.Text, SDO.URL],
+        url=SDO.sdLicense,
+    )
+    url: str | None = mlc_dataclasses.jsonld_field(
+        default=None,
+        description=(
+            "The URL of the dataset. This generally corresponds to the Web page for"
+            " the dataset."
+        ),
+        input_types=[SDO.URL],
+        url=constants.SCHEMA_ORG_URL,
+    )
+    version: str | None = mlc_dataclasses.jsonld_field(
+        cast_fn=cast_version,
+        default=None,
+        description="The version of the dataset following the requirements below.",
+        input_types=[SDO.Integer, SDO.Number, SDO.Text],
+        url=constants.SCHEMA_ORG_VERSION,
+    )
+    distribution: list[FileObject | FileSet] = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default_factory=list,
+        input_types=[FileObject, FileSet],
+        url=constants.SCHEMA_ORG_DISTRIBUTION,
+    )
+    record_sets: list[RecordSet] = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default_factory=list,
+        input_types=[RecordSet],
+        url=constants.ML_COMMONS_RECORD_SET,
+    )
+    data_collection: str | None = mlc_dataclasses.jsonld_field(
+        cardinality="ONE",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_DATA_COLLECTION,
+    )
+    data_collection_type: list[str] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_DATA_COLLECTION_TYPE,
+    )
+    data_collection_missing_data: str | None = mlc_dataclasses.jsonld_field(
+        cardinality="ONE",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_DATA_COLLECTION_MISSING_DATA,
+    )
+    data_collection_raw_data: str | None = mlc_dataclasses.jsonld_field(
+        cardinality="ONE",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_DATA_COLLECTION_RAW_DATA,
+    )
+    data_collection_timeframe: list[datetime.datetime] | None = (
+        mlc_dataclasses.jsonld_field(
+            cardinality="MANY",
+            cast_fn=cast_dates,
+            default=None,
+            input_types=[SDO.Date, SDO.DateTime],
+            url=constants.ML_COMMONS_RAI_DATA_COLLECTION_TIME_FRAME,
+        )
+    )
+    data_imputation_protocol: str | None = mlc_dataclasses.jsonld_field(
+        cardinality="ONE",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_DATA_IMPUTATION_PROTOCOL,
+    )
+    data_preprocessing_protocol: list[str] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_DATA_PREPROCESSING_PROTOCOL,
+    )
+    data_manipulation_protocol: str | None = mlc_dataclasses.jsonld_field(
+        cardinality="ONE",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_DATA_DATA_MANIPULATION_PROTOCOL,
+    )
+    data_annotation_protocol: list[str] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_DATA_ANNOTATION_PROTOCOL,
+    )
+    data_annotation_platform: list[str] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_DATA_ANNOTATION_PLATFORM,
+    )
+    data_annotation_analysis: list[str] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_DATA_ANNOTATION_ANALYSIS,
+    )
+    annotations_per_item: str | None = mlc_dataclasses.jsonld_field(
+        cardinality="ONE",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_ANNOTATIONS_PER_ITEM,
+    )
+    annotator_demographics: list[str] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_ANNOTATOR_DEMOGRAPHICS,
+    )
+    machine_annotation_tools: list[str] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_MACHINE_ANNOTATION_TOOLS,
+    )
+    data_biases: list[str] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_DATA_BIASES,
+    )
+    data_use_cases: list[str] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_DATA_USE_CASES,
+    )
+    data_limitations: list[str] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_DATA_LIMITATIONS,
+    )
+    data_social_impact: str | None = mlc_dataclasses.jsonld_field(
+        cardinality="ONE",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_DATA_SOCIAL_IMPACT,
+    )
+    personal_sensitive_information: list[str] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_PERSONAL_SENSITIVE_INFORMATION,
+    )
+    data_release_maintenance_plan: str | None = mlc_dataclasses.jsonld_field(
+        cardinality="ONE",
+        default=None,
+        input_types=[SDO.Text],
+        url=constants.ML_COMMONS_RAI_DATA_RELEASE_MAINTENANCE_PLAN,
+    )
 
     def __post_init__(self):
         """Checks arguments of the node and setup ID."""
+        Node.__post_init__(self)
         # Define parents.
         for node in self.distribution:
             node.parents = [self]
@@ -154,11 +318,7 @@ class Metadata(Node):
 
         # Check properties.
         self.validate_name()
-        self.version = self.validate_version()
         self.license = self.validate_license()
-        self.date_created = self.validate_date(self.date_created)
-        self.date_modified = self.validate_date(self.date_modified)
-        self.date_published = self.validate_date(self.date_published)
         if self.ctx.is_v0():
             self.assert_has_mandatory_properties("name")
         self.assert_has_optional_properties(
@@ -176,62 +336,19 @@ class Metadata(Node):
 
     def to_json(self) -> Json:
         """Converts the `Metadata` to JSON."""
-        conforms_to = self.ctx.conforms_to.to_json() if self.ctx.conforms_to else None
-
         context = self.ctx.rdf.context
         if "@base" in context:
             if context["@base"] == constants.BASE_IRI:
                 context.pop("@base")
-
-        return remove_empty_values({
-            "@context": context,
-            "@type": "sc:Dataset",
-            "name": self.name,
-            "conformsTo": conforms_to,
-            "description": self.description,
-            "creator": PersonOrOrganization.to_json(self.creators),
-            "dateCreated": from_datetime_to_str(self.date_created),
-            "dateModified": from_datetime_to_str(self.date_modified),
-            "datePublished": from_datetime_to_str(self.date_published),
-            #  RAI extension
-            "rai:dataCollection": self.data_collection,
-            "rai:dataCollectionType": self.data_collection_type,
-            "rai:dataCollectionTypeOthers": self.data_collection_type_others,
-            "rai:dataCollectionMissing": self.data_collection_missing,
-            "rai:dataCollectionRaw": self.data_collection_raw,
-            "rai:dataCollectionTimeFrameStart": from_datetime_to_str(
-                self.data_collection_timeframe_start
-            ),
-            "rai:dataCollectionTimeFrameEnd": from_datetime_to_str(
-                self.data_collection_timeframe_end
-            ),
-            "rai:dataPreprocessingImputation": self.data_preprocessing_imputation,
-            "rai:dataPreprocessingProtocol": self.data_preprocessing_protocol,
-            "rai:dataPreprocessingManipulation": self.data_preprocessing_manipulation,
-            "rai:dataAnnotationProtocol": self.data_annotation_protocol,
-            "rai:dataAnnotationPlatform": self.data_annotation_platform,
-            "rai:dataAnnotationAnalysis": self.data_annotation_analysis,
-            "rai:dataAnnotationPerItem": self.data_annotation_peritem,
-            "rai:dataAnnotationDemographics": self.data_annotation_demographics,
-            "rai:dataAnnotationTools": self.data_annotation_tools,
-            "rai:dataBiases": self.data_biases,
-            "rai:dataUseCases": self.data_usecases,
-            "rai:dataLimitations": self.data_limitation,
-            "rai:dataSocialImpact": self.data_social_impact,
-            "rai:dataSensitive": self.data_sensitive,
-            "rai:dataMaintenance": self.data_maintenance,
-            "citation": self.cite_as if self.ctx.is_v0() else None,
-            "citeAs": None if self.ctx.is_v0() else self.cite_as,
-            "isLiveDataset": self.is_live_dataset,
-            "keywords": unbox_singleton_list(self.keywords),
-            "license": unbox_singleton_list(self.license),
-            "publisher": PersonOrOrganization.to_json(self.publisher),
-            "url": self.url,
-            "sameAs": unbox_singleton_list(self.same_as),
-            "version": self.version,
-            "distribution": [f.to_json() for f in self.distribution],
-            "recordSet": [record_set.to_json() for record_set in self.record_sets],
-        })
+        jsonld = super().to_json()
+        jsonld.pop("@id", None)
+        jsonld["@context"] = context
+        conforms_to = self.ctx.conforms_to.to_json() if self.ctx.conforms_to else None
+        jsonld["conformsTo"] = conforms_to
+        if self.ctx.is_live_dataset:
+            jsonld["isLiveDataset"] = self.ctx.is_live_dataset
+        jsonld = remove_empty_values(jsonld)
+        return sort_dict(jsonld)
 
     @property
     def file_objects(self) -> list[FileObject]:
@@ -260,65 +377,26 @@ class Metadata(Node):
                 nodes.extend(field.sub_fields)
         return nodes
 
-    def validate_version(self) -> str | None:
-        """Validates the given version and returns a normalized string version.
-
-        A valid version follows Semantic Versioning 2.0.0 `MAJOR.MINOR.PATCH`.
-        For more information: https://semver.org/spec/v2.0.0.html.
-        """
-        version = self.version
-
-        # Version is a recommended but not mandatory attribute.
-        if version is None:
-            return None
-
-        if isinstance(version, str):
-            numbers = version.split(".")
-            are_not_all_numbers = any(not number.isnumeric() for number in numbers)
-            if len(numbers) != 3 or are_not_all_numbers:
-                self.add_warning(
-                    f"Version doesn't follow MAJOR.MINOR.PATCH: {version}. For more"
-                    " information refer to: https://semver.org/spec/v2.0.0.html"
-                )
-            return version
-        elif isinstance(version, int):
-            return f"{version}.0.0"
-        elif isinstance(version, float):
-            return f"{version}.0"
-        else:
-            self.add_error(
-                f"The version should be a string or a number. Got: {type(version)}."
-            )
-            return None
-
-    def validate_license(self) -> list[str] | None:
+    def validate_license(self) -> list[str | CreativeWork] | None:
         """Validates the license as a list of strings."""
         license = self.license
+        input_types = (str, CreativeWork)
         if license is None:
             return None
         elif isinstance(license, list):
-            if any(not isinstance(el, str) for el in license):
-                self.add_error(f"License should be a list of str. Got: {license}")
+            if any(not isinstance(el, input_types) for el in license):
+                self.add_error(
+                    f"License should be a list of str or CreativeWork. Got: {license}"
+                )
                 return None
             return license
-        elif isinstance(license, str):
+        elif isinstance(license, input_types):
             return [license]
         else:
-            self.add_error(f"License should be a list of str. Got: {license}")
+            self.add_error(
+                f"License should be a list of str or CreativeWork. Got: {license}"
+            )
             return None
-
-    def validate_date(self, date: Any) -> datetime.datetime | None:
-        """Validates dates as a datetime for any input."""
-        if date is None:
-            return None
-        elif isinstance(date, str):
-            return from_str_to_datetime(self.ctx.issues, date)
-        elif isinstance(date, datetime.datetime):
-            return date
-        elif isinstance(date, datetime.date):
-            return datetime.datetime.combine(date, datetime.time.min)
-        self.add_error(f"Wrong type for a date. Expected Date or Datetime. Got: {date}")
-        return None
 
     def check_graph(self):
         """Checks the integrity of the structure graph.
@@ -340,7 +418,7 @@ class Metadata(Node):
             field.data_type
 
     @classmethod
-    def from_file(cls, ctx: Context, file: epath.PathLike) -> Metadata:
+    def from_file(cls, ctx: Context, file: epath.PathLike) -> Self:
         """Creates the Metadata from a Croissant file."""
         if is_url(file):
             response = requests.get(file)
@@ -355,128 +433,8 @@ class Metadata(Node):
         cls,
         ctx: Context,
         json_: Json,
-    ) -> Metadata:
+    ) -> Self:
         """Creates a `Metadata` from JSON."""
         ctx.rdf = Rdf.from_json(ctx, json_)
-        metadata = expand_jsonld(json_, ctx=ctx)
-        return cls.from_jsonld(ctx=ctx, metadata=metadata)
-
-    @classmethod
-    def from_jsonld(cls, ctx: Context, metadata: Json) -> Metadata:
-        """Creates a `Metadata` from JSON-LD."""
-        check_expected_type(ctx.issues, metadata, constants.SCHEMA_ORG_DATASET)
-        distribution: list[FileObject | FileSet] = []
-        file_set_or_objects = metadata.get(constants.SCHEMA_ORG_DISTRIBUTION, [])
-        dataset_name = metadata.get(constants.SCHEMA_ORG_NAME, "")
-        ctx.conforms_to = CroissantVersion.from_jsonld(
-            ctx, metadata.get(constants.DCTERMS_CONFORMS_TO)
-        )
-
-        if ctx.is_v0():
-            cite_as = metadata.get(constants.SCHEMA_ORG_CITATION)
-        else:
-            cite_as = metadata.get(constants.ML_COMMONS_CITE_AS(ctx))
-
-        for set_or_object in file_set_or_objects:
-            name = set_or_object.get(constants.SCHEMA_ORG_NAME, "")
-            distribution_type = set_or_object.get("@type")
-            if distribution_type == constants.SCHEMA_ORG_FILE_OBJECT(ctx):
-                distribution.append(FileObject.from_jsonld(ctx, set_or_object))
-            elif distribution_type == constants.SCHEMA_ORG_FILE_SET(ctx):
-                distribution.append(FileSet.from_jsonld(ctx, set_or_object))
-            else:
-                ctx.issues.add_error(
-                    f'"{name}" should have an attribute "@type":'
-                    f' "{constants.SCHEMA_ORG_FILE_OBJECT(ctx)}" or "@type":'
-                    f' "{constants.SCHEMA_ORG_FILE_SET(ctx)}". Got'
-                    f" {distribution_type} instead."
-                )
-        record_sets = [
-            RecordSet.from_jsonld(ctx, record_set)
-            for record_set in metadata.get(constants.ML_COMMONS_RECORD_SET(ctx), [])
-        ]
-        url = metadata.get(constants.SCHEMA_ORG_URL)
-        creators = PersonOrOrganization.from_jsonld(
-            metadata.get(constants.SCHEMA_ORG_CREATOR)
-        )
-        publisher = PersonOrOrganization.from_jsonld(
-            metadata.get(constants.SCHEMA_ORG_PUBLISHER)
-        )
-        date_collection_timeframe_start = from_str_to_datetime(
-            ctx.issues,
-            metadata.get(constants.ML_COMMONS_RAI_DATA_COLLECTION_TIMEFRAME_START),
-        )
-        date_collection_timeframe_end = from_str_to_datetime(
-            ctx.issues,
-            metadata.get(constants.ML_COMMONS_RAI_DATA_COLLECTION_TIMEFRAME_END),
-        )
-        return cls(
-            ctx=ctx,
-            cite_as=cite_as,
-            creators=creators,
-            date_created=metadata.get(constants.SCHEMA_ORG_DATE_CREATED),
-            date_modified=metadata.get(constants.SCHEMA_ORG_DATE_MODIFIED),
-            date_published=metadata.get(constants.SCHEMA_ORG_DATE_PUBLISHED),
-            description=metadata.get(constants.SCHEMA_ORG_DESCRIPTION),
-            data_collection=metadata.get(constants.ML_COMMONS_RAI_DATA_COLLECTION),
-            data_collection_type=metadata.get(
-                constants.ML_COMMONS_RAI_DATA_COLLECTION_TYPE
-            ),
-            data_collection_type_others=metadata.get(
-                constants.ML_COMMONS_RAI_DATA_COLLECTION_TYPE_OTHERS
-            ),
-            data_collection_missing=metadata.get(
-                constants.ML_COMMONS_RAI_DATA_COLLECTION_MISSING
-            ),
-            data_collection_raw=metadata.get(
-                constants.ML_COMMONS_RAI_DATA_COLLECTION_RAW
-            ),
-            data_collection_timeframe_start=date_collection_timeframe_start,
-            data_collection_timeframe_end=date_collection_timeframe_end,
-            data_preprocessing_imputation=metadata.get(
-                constants.ML_COMMONS_RAI_DATA_PREPROCESSING_IMPUTATION
-            ),
-            data_preprocessing_protocol=metadata.get(
-                constants.ML_COMMONS_RAI_DATA_PREPROCESSING_PROTOCOL
-            ),
-            data_preprocessing_manipulation=metadata.get(
-                constants.ML_COMMONS_RAI_DATA_PREPROCESSING_MANIPULATION
-            ),
-            data_annotation_protocol=metadata.get(
-                constants.ML_COMMONS_RAI_DATA_ANNOTATION_PROTOCOL
-            ),
-            data_annotation_platform=metadata.get(
-                constants.ML_COMMONS_RAI_DATA_ANNOTATION_PLATFORM
-            ),
-            data_annotation_analysis=metadata.get(
-                constants.ML_COMMONS_RAI_DATA_ANNOTATION_ANALYSIS
-            ),
-            data_annotation_peritem=metadata.get(
-                constants.ML_COMMONS_RAI_DATA_ANNOTATION_PER_ITEM
-            ),
-            data_annotation_demographics=metadata.get(
-                constants.ML_COMMONS_RAI_DATA_ANNOTATION_DEMOGRAPHICS
-            ),
-            data_annotation_tools=metadata.get(
-                constants.ML_COMMONS_RAI_DATA_ANNOTATION_TOOLS
-            ),
-            data_biases=metadata.get(constants.ML_COMMONS_RAI_DATA_BIASES),
-            data_usecases=metadata.get(constants.ML_COMMONS_RAI_DATA_USE_CASES),
-            data_limitation=metadata.get(constants.ML_COMMONS_RAI_DATA_LIMITATION),
-            data_social_impact=metadata.get(
-                constants.ML_COMMONS_RAI_DATA_SOCIAL_IMPACT
-            ),
-            data_sensitive=metadata.get(constants.ML_COMMONS_RAI_DATA_SENSITIVE),
-            data_maintenance=metadata.get(constants.ML_COMMONS_RAI_DATA_MAINTENANCE),
-            distribution=distribution,
-            is_live_dataset=metadata.get(constants.ML_COMMONS_IS_LIVE_DATASET(ctx)),
-            keywords=metadata.get(constants.SCHEMA_ORG_KEYWORDS),
-            license=metadata.get(constants.SCHEMA_ORG_LICENSE),
-            name=dataset_name,
-            publisher=publisher,
-            record_sets=record_sets,
-            same_as=box_singleton_list(metadata.get(constants.SCHEMA_ORG_SAME_AS)),
-            id=uuid_from_jsonld(metadata),
-            url=url,
-            version=metadata.get(constants.SCHEMA_ORG_VERSION),
-        )
+        jsonld = expand_jsonld(json_, ctx=ctx)
+        return cls.from_jsonld(ctx=ctx, jsonld=jsonld)

@@ -3,6 +3,11 @@
 import dataclasses
 from typing import Any
 
+WRONG_ID_MSG = (
+    "Note that `@id`s should be valid URIs. If you wish to use reserved characters in"
+    " your `@id`s, you should URL-encode them."
+)
+
 
 class ValidationError(Exception):
     """Error during the validation of the format."""
@@ -10,6 +15,14 @@ class ValidationError(Exception):
 
 class GenerationError(Exception):
     """Error during the generation of the dataset."""
+
+
+class WarningException(Exception):
+    """Exception triggering a warning."""
+
+
+class ErrorException(Exception):
+    """Exception triggering an error."""
 
 
 @dataclasses.dataclass(frozen=True)

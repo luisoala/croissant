@@ -1,26 +1,23 @@
 """RecordSet module."""
 
-from __future__ import annotations
-
-import dataclasses
 import itertools
 import json
 
+from rdflib import term
 from rdflib.namespace import SDO
 
 from mlcroissant._src.core import constants
+from mlcroissant._src.core import dataclasses as mlc_dataclasses
 from mlcroissant._src.core.context import Context
-from mlcroissant._src.core.dataclasses import jsonld_field
-from mlcroissant._src.core.dataclasses import JsonldField
+from mlcroissant._src.core.data_types import data_types_from_jsonld
+from mlcroissant._src.core.data_types import data_types_to_jsonld
 from mlcroissant._src.core.types import Json
-from mlcroissant._src.structure_graph.base_node import NodeV2
+from mlcroissant._src.structure_graph.base_node import Node
+from mlcroissant._src.structure_graph.base_node import node_by_uuid
 from mlcroissant._src.structure_graph.nodes.field import Field
 
-OriginalField = dataclasses.Field
-dataclasses.Field = JsonldField  # type: ignore
 
-
-def data_from_jsonld(ctx: Context, data) -> Json | None:
+def json_from_jsonld(ctx: Context, data) -> Json | None:
     """Creates `data` from a JSON-LD fragment."""
     if isinstance(data, str):
         try:
@@ -32,30 +29,50 @@ def data_from_jsonld(ctx: Context, data) -> Json | None:
     return None
 
 
-@dataclasses.dataclass(eq=False, repr=False)
-class RecordSet(NodeV2):
+@mlc_dataclasses.dataclass
+class RecordSet(Node):
     """Nodes to describe a dataset RecordSet."""
 
-    # pytype: disable=annotation-type-mismatch
-    data: list[Json] | None = jsonld_field(
+    JSONLD_TYPE = constants.ML_COMMONS_RECORD_SET_TYPE
+
+    data: list[Json] | None = mlc_dataclasses.jsonld_field(
         cardinality="MANY",
         default=None,
         description="One or more records that constitute the data of the `RecordSet`.",
-        from_jsonld=data_from_jsonld,
-        input_types=[SDO.Text],
+        from_jsonld=json_from_jsonld,
         url=constants.ML_COMMONS_DATA,
     )
-    description: str | None = jsonld_field(
+    data_types: list[term.URIRef] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default_factory=list,
+        description=(
+            "The data type of the RecordSet. Mainly used to specify: `sc:Enumeration`."
+        ),
+        from_jsonld=data_types_from_jsonld,
+        to_jsonld=data_types_to_jsonld,
+        url=constants.ML_COMMONS_DATA_TYPE,
+    )
+    description: str | None = mlc_dataclasses.jsonld_field(
         default=None,
         input_types=[SDO.Text],
         url=constants.SCHEMA_ORG_DESCRIPTION,
     )
-    is_enumeration: bool | None = jsonld_field(
+    examples: list[Json] | None = mlc_dataclasses.jsonld_field(
+        cardinality="MANY",
+        default=None,
+        description=(
+            "One or more records provided as example content of the `RecordSet`, or a"
+            " reference to data source that contains examples."
+        ),
+        from_jsonld=json_from_jsonld,
+        url=constants.ML_COMMONS_EXAMPLES,
+    )
+    is_enumeration: bool | None = mlc_dataclasses.jsonld_field(
         default=None,
         input_types=[SDO.Boolean],
         url=constants.ML_COMMONS_IS_ENUMERATION,
     )
-    key: str | list[str] | None = jsonld_field(
+    key: list[str] | None = mlc_dataclasses.jsonld_field(
         cardinality="MANY",
         default=None,
         description=(
@@ -65,31 +82,29 @@ class RecordSet(NodeV2):
         input_types=[SDO.Text],
         url=constants.SCHEMA_ORG_KEY,
     )
-    name: str = jsonld_field(
+    name: str = mlc_dataclasses.jsonld_field(
         default="",
+        description="The name of the RecordSet.",
         input_types=[SDO.Text],
         url=constants.SCHEMA_ORG_NAME,
     )
-    fields: list[Field] = jsonld_field(
+    fields: list[Field] = mlc_dataclasses.jsonld_field(
         cardinality="MANY",
         default_factory=list,
         description=(
             "A data element that appears in the records of the RecordSet (e.g., one"
             " column of a table)."
         ),
-        from_jsonld=Field.from_jsonld,
         input_types=[Field],
-        to_jsonld=lambda ctx, fields: [field.to_json() for field in fields],
         url=constants.ML_COMMONS_FIELD,
     )
-    # pytype: enable=annotation-type-mismatch
 
     def __post_init__(self):
         """Checks arguments of the node."""
+        Node.__post_init__(self)
         uuid_field = "name" if self.ctx.is_v0() else "id"
         self.validate_name()
         self.assert_has_mandatory_properties(uuid_field)
-        self.assert_has_optional_properties("description")
 
         if self.data is not None:
             data = self.data
@@ -122,7 +137,7 @@ class RecordSet(NodeV2):
     def check_joins_in_fields(self):
         """Checks that all joins are declared when they are consumed."""
         joins: set[tuple[str, str]] = set()
-        sources: set[str] = set()
+        sources: set[str | None] = set()
         for field in self.fields:
             source_uuid = field.source.uuid
             references_uuid = field.references.uuid
@@ -154,24 +169,17 @@ class RecordSet(NodeV2):
                     " documentation for more information."
                 )
 
-    @classmethod
-    def _JSONLD_TYPE(cls, ctx: Context):
-        """Gets the class' JSON-LD @type."""
-        return constants.ML_COMMONS_RECORD_SET_TYPE(ctx)
 
-
-def get_parent_uuid(ctx: Context, uuid: str) -> str:
+def get_parent_uuid(ctx: Context, uuid: str) -> str | None:
     """Retrieves the UID of the parent, e.g. `file/column` -> `file`."""
-    node = ctx.node_by_uuid(uuid)
+    node = node_by_uuid(ctx, uuid)
     if node is None:
         ctx.issues.add_error(
             f"Node with uuid={uuid} does not exist. This error might have been found"
             " during a Join operation."
         )
+        return None
     if isinstance(node, Field):
         if node.parent:
             return node.parent.uuid
     return node.uuid
-
-
-dataclasses.Field = OriginalField  # type: ignore

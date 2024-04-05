@@ -6,6 +6,7 @@ The main functions are:
 """
 
 import json
+import re
 from typing import Any
 
 import rdflib
@@ -30,6 +31,7 @@ from mlcroissant._src.core.rdf import get_context
 from mlcroissant._src.core.rdf import make_context
 from mlcroissant._src.core.types import Json
 
+_ID_REGEX = re.compile(r".*\s+.*")
 _DCTERMS_PREFIX = constants.DCTERMS
 _SCHEMA_ORG_PREFIX = constants.SCHEMA_ORG
 _WD_PREFIX = "https://www.wikidata.org/wiki/"
@@ -79,8 +81,16 @@ def _sort_items(jsonld: Json) -> list[tuple[str, Any]]:
     are at the end.
     """
     items = sorted(jsonld.items())
-    start_keys = ["@context", "@type", "name", "description", "conformsTo"]
-    end_keys = ["distribution", "field", "data", "recordSet", "subField"]
+    start_keys = ["@context", "@type", "@id", "name", "description", "conformsTo"]
+    end_keys = [
+        "distribution",
+        "field",
+        "data",
+        "recordSet",
+        "subField",
+        "extract",
+        "transform",
+    ]
     sorted_items = []
     for key in start_keys:
         if key in jsonld:
@@ -94,17 +104,18 @@ def _sort_items(jsonld: Json) -> list[tuple[str, Any]]:
     return sorted_items
 
 
-def _sort_dict(d: Json):
+def sort_dict(d: Json):
     """Sorts the keys of a nested dict."""
     return {
-        k: _sort_dict(v) if isinstance(v, dict) and k != "@context" else v
+        k: sort_dict(v) if isinstance(v, dict) and k != "@context" else v
         for k, v in _sort_items(d)
     }
 
 
 def remove_empty_values(d: Json) -> Json:
     """Removes empty values in a JSON."""
-    return {k: v for k, v in d.items() if v}
+    # Either v exists or v is a bool (to account for False values)
+    return {k: v for k, v in d.items() if v or isinstance(v, bool)}
 
 
 def unbox_singleton_list(d: Any):
@@ -167,6 +178,23 @@ def recursively_populate_jsonld(entry_node: Json, id_to_node: dict[str, Json]) -
     return entry_node
 
 
+def check_valid_ids(data: Json, ctx: Context) -> None:
+    """Checks that the given json contains valid `@id`s."""
+    if isinstance(data, dict):
+        for k, v in data.items():
+            if k == "@id" and re.match(_ID_REGEX, v):
+                ctx.issues.add_error(
+                    f"The dataset contains a wrong `@id`: '{v}'. Note that currently we"
+                    " do not support `@id`s containing whitespaces (not even if"
+                    " URL-escaped)."
+                )
+            if isinstance(v, dict):
+                check_valid_ids(v, ctx)
+            elif isinstance(v, list):
+                for d in v:
+                    check_valid_ids(d, ctx)
+
+
 def expand_jsonld(data: Json, ctx: Context) -> Json:
     """Expands a Croissant JSON to a nested JSON-LD with expanded.
 
@@ -174,6 +202,7 @@ def expand_jsonld(data: Json, ctx: Context) -> Json:
     full expression, but RDFLib also flattens the JSON-LD in a list of nodes. We then
     need to reconstruct the hierarchy.
     """
+    check_valid_ids(data=data, ctx=ctx)
     context = get_context(data)
     if "@base" not in context:
         context["@base"] = constants.BASE_IRI
@@ -255,4 +284,4 @@ def compact_jsonld(json_: Any) -> Any:
             json_[new_key] = value
         else:
             json_[key] = new_value
-    return _sort_dict(json_)
+    return sort_dict(json_)

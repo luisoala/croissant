@@ -64,6 +64,20 @@ def test_static_analysis_0_8(folder):
     assert str(error_info.value) == get_error_msg(base_path / folder)
 
 
+# Tests for 1.0-datasets only.
+@pytest.mark.parametrize(
+    "folder",
+    [
+        "distribution_bad_id",
+    ],
+)
+def test_static_analysis_1_0(folder):
+    base_path = epath.Path(__file__).parent / "tests/graphs/1.0"
+    with pytest.raises(ValidationError) as error_info:
+        datasets.Dataset(base_path / f"{folder}/metadata.json")
+    assert str(error_info.value) == get_error_msg(base_path / folder)
+
+
 def load_records_and_test_equality(
     version: str, dataset_name: str, record_set_name: str, num_records: int
 ):
@@ -163,12 +177,12 @@ def test_nonhermetic_loading(version, dataset_name, record_set_name, num_records
 
 @pytest.mark.nonhermetic
 def test_load_from_huggingface():
-    url = "https://datasets-server.huggingface.co/croissant?dataset=mnist&full=true"
+    url = "https://huggingface.co/api/datasets/mnist/croissant"
     dataset = datasets.Dataset(url)
     has_one_record = False
     for record in dataset.records(record_set="record_set_mnist"):
-        assert record["label"] == 7
-        assert isinstance(record["image"], deps.PIL_Image.Image)
+        assert record["record_set_mnist/label"] == 7
+        assert isinstance(record["record_set_mnist/image"], deps.PIL_Image.Image)
         has_one_record = True
         break
     assert has_one_record, (
