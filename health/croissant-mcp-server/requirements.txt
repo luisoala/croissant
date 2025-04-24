@@ -1,0 +1,22 @@
+# Core dependencies
+fastapi>=0.104.0
+uvicorn>=0.24.0
+pydantic>=2.4.2
+python-multipart>=0.0.6
+sse-starlette>=1.7.0
+
+# MCP SDK
+#git+https://github.com/modelcontextprotocol/python-sdk.git
+mcp==1.5.0
+
+# Utilities
+httpx>=0.25.1
+python-dotenv>=1.0.0
+
+# Production
+gunicorn>=21.2.0
+uvicorn[standard]>=0.21.1
+python-json-logger>=2.0.0
+
+# Additional dependencies
+aiofiles>=23.2.1
