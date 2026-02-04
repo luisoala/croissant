@@ -62,7 +62,7 @@ def _cast_file_property(file_property: Any) -> FileProperty | None:
 class Extract(Node):
     """Container for possible ways of extracting the data.
 
-    Args:
+    Attributes:
         column: The column in a columnar format (e.g., CSV).
         file_property: The property of a file to extract.
         json_path: The JSON path if the source is a JSON.
@@ -89,26 +89,42 @@ class Extract(Node):
         url=constants.ML_COMMONS_JSON_PATH,
     )
 
+    def __eq__(self, other):
+        """Checks equality."""
+        if not isinstance(other, Extract):
+            return False
+        return (
+            self.column == other.column
+            and self.file_property == other.file_property
+            and self.json_path == other.json_path
+        )
+
+    def __hash__(self):
+        """Hashes the object."""
+        return hash((self.column, self.file_property, self.json_path))
+
 
 @mlc_dataclasses.dataclass
 class Transform(Node):
     """Container for transformation.
 
-    Args:
+    Attributes:
         format: The format for a date (e.g. "%Y-%m-%d %H:%M:%S.%f") or for a bounding
             box (e.g., "XYXY").
         json_path: The JSONPath expression that needs to be evaluated.
+        read_lines: Whether to read the file line by line.
         regex: A regex pattern with a capturing group to extract information in a
             string.
         replace: A replace pattern, e.g. "pattern_to_remove/pattern_to_add".
+        sampling_rate: The sampling rate to apply on the file.
         separator: A separator in a string to yield a list.
+        un_archive: Whether to un-archive the file.
     """
 
     JSONLD_TYPE = None
 
     format: str | None = mlc_dataclasses.jsonld_field(
         default=None,
-        exclusive_with=["json_path", "regex", "replace", "separator"],
         input_types=[SDO.Text],
         url=constants.ML_COMMONS_FORMAT,
     )
@@ -116,6 +132,11 @@ class Transform(Node):
         default=None,
         input_types=[SDO.Text],
         url=constants.ML_COMMONS_JSON_PATH,
+    )
+    read_lines: bool | None = mlc_dataclasses.jsonld_field(
+        default=None,
+        input_types=[SDO.Boolean],
+        url=constants.ML_COMMONS_READLINES,
     )
     regex: str | None = mlc_dataclasses.jsonld_field(
         default=None,
@@ -137,6 +158,68 @@ class Transform(Node):
         input_types=[SDO.Text],
         url=constants.ML_COMMONS_SEPARATOR,
     )
+    un_archive: bool | None = mlc_dataclasses.jsonld_field(
+        default=None,
+        input_types=[SDO.Boolean],
+        url=constants.ML_COMMONS_UNARCHIVE,
+    )
+
+    def __post_init__(self):
+        """Checks arguments of the node."""
+        Node.__post_init__(self)
+        self.validate()
+
+    def validate(self):
+        """Validates the transform."""
+        string_transforms = [
+            self.format,
+            self.json_path,
+            self.regex,
+            self.replace,
+            self.separator,
+        ]
+        num_string_transforms = sum(bool(p) for p in string_transforms)
+        if num_string_transforms > 1:
+            self.add_error(
+                "Too many string transforms. Exactly one of these properties should be"
+                " defined: format, json_path, regex, replace, separator."
+            )
+        has_boolean_transform = self.read_lines or self.un_archive
+        if num_string_transforms == 0 and not has_boolean_transform:
+            self.add_error(
+                "At least one transform must be defined. Choose among: format,"
+                " json_path, regex, replace, separator, read_lines, un_archive."
+            )
+
+    def __eq__(self, other):
+        """Checks equality."""
+        if not isinstance(other, Transform):
+            return False
+        return (
+            self.format == other.format
+            and self.json_path == other.json_path
+            and self.regex == other.regex
+            and self.replace == other.replace
+            and self.sampling_rate == other.sampling_rate
+            and self.separator == other.separator
+            and self.un_archive == other.un_archive
+            and self.read_lines == other.read_lines
+        )
+
+    def __hash__(self):
+        """Hashes the object."""
+        return hash(
+            (
+                self.format,
+                self.json_path,
+                self.regex,
+                self.replace,
+                self.sampling_rate,
+                self.separator,
+                self.un_archive,
+                self.read_lines,
+            )
+        )
 
 
 @mlc_dataclasses.dataclass
@@ -249,6 +332,44 @@ class Source(Node):
             return self.field or self.distribution
         else:
             return self.field or self.file_object or self.file_set
+
+    def __eq__(self, other):
+        """Checks equality."""
+        if not isinstance(other, Source):
+            return False
+        if self.ctx.is_v0():
+            return (
+                self.distribution == other.distribution
+                and self.extract == other.extract
+                and self.format == other.format
+                and self.sampling_rate == other.sampling_rate
+                and self.transforms == other.transforms
+            )
+        else:
+            return (
+                self.field == other.field
+                and self.file_object == other.file_object
+                and self.file_set == other.file_set
+                and self.extract == other.extract
+                and self.format == other.format
+                and self.sampling_rate == other.sampling_rate
+                and self.transforms == other.transforms
+            )
+
+    def __hash__(self):
+        """Hashes the object."""
+        return hash(
+            (
+                self.distribution,
+                self.extract,
+                self.field,
+                self.file_object,
+                self.file_set,
+                self.format,
+                self.sampling_rate,
+                tuple(self.transforms) if self.transforms else None,
+            )
+        )
 
     def get_column(self) -> str | FileProperty:
         """Retrieves the name of the column associated to the source."""

@@ -48,12 +48,13 @@ def test_nonhermetic_loading(version, dataset_name, record_set_name, num_records
         # This dataset will timeout if the following feature is broken: mlcroissant
         # yields examples by downloading parquet files one by one. mlcroissant should
         # not download all parquet files upfront.
-        [
-            "https://huggingface.co/api/datasets/bigcode/the-stack-metadata/croissant",
-            "default",
-            1,
-            {"default/split": "train"},
-        ],
+        # TODO(ccl-core): re-enable this test once HF regression in fixed.
+        # [
+        #     "https://huggingface.co/api/datasets/bigcode/the-stack-metadata/croissant",
+        #     "default",
+        #     1,
+        #     {"default/split": "train"},
+        # ],
     ],
 )
 def test_nonhermetic_loading_1_0(dataset_name, record_set_name, num_records, filters):
@@ -73,6 +74,12 @@ def test_nonhermetic_loading_1_0(dataset_name, record_set_name, num_records, fil
             2,
             None,
         ],
+        [
+            "commoncrawl-CC-MAIN-2025-43-draft/metadata.json",
+            "warc-records",
+            3,
+            None,
+        ],
     ],
 )
 def test_nonhermetic_loading_1_1(dataset_name, record_set_name, num_records, filters):
@@ -83,7 +90,7 @@ def test_nonhermetic_loading_1_1(dataset_name, record_set_name, num_records, fil
 
 @pytest.mark.nonhermetic
 def test_load_from_huggingface():
-    url = "https://huggingface.co/api/datasets/mnist/croissant"
+    url = "https://huggingface.co/api/datasets/ylecun/mnist/croissant"
     dataset = datasets.Dataset(url)
     has_one_record = False
     for record in dataset.records(record_set="mnist"):

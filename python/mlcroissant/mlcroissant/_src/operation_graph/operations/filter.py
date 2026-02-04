@@ -44,6 +44,11 @@ class FilterFiles(Operation):
             raise ValueError("cannot filter files without `includes`.")
         included_files: list[Path] = []
         for path in paths:
+            # Case 1: The current path acts as a file that might match the pattern.
+            if match_path(self.node.includes, path.fullpath):
+                included_files.append(path)
+            # Case 2: The current path acts as a directory.
+            # We need to traverse it to find matching files inside.
             for basepath, _, files in path.filepath.walk():  # type: ignore  # https://github.com/python/mypy/issues/11880
                 for file in files:
                     filepath = epath.Path(basepath) / file

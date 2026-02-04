@@ -14,6 +14,7 @@ from mlcroissant._src.core.context import Context
 from mlcroissant._src.core.context import CroissantVersion
 from mlcroissant._src.core.dates import cast_date
 from mlcroissant._src.core.dates import cast_dates
+from mlcroissant._src.core.dates import from_datetime_to_str
 from mlcroissant._src.core.issues import ValidationError
 from mlcroissant._src.core.json_ld import expand_jsonld
 from mlcroissant._src.core.json_ld import remove_empty_values
@@ -32,6 +33,18 @@ from mlcroissant._src.structure_graph.nodes.file_set import FileSet
 from mlcroissant._src.structure_graph.nodes.organization import Organization
 from mlcroissant._src.structure_graph.nodes.person import Person
 from mlcroissant._src.structure_graph.nodes.record_set import RecordSet
+
+
+def _date_to_jsonld(ctx: Context, date: datetime.datetime | None) -> str | None:
+    return from_datetime_to_str(date)
+
+
+def _dates_to_jsonld(
+    ctx: Context, dates: list[datetime.datetime] | None
+) -> list[str | None] | None:
+    if dates is None:
+        return None
+    return [from_datetime_to_str(date) for date in dates]
 
 
 @mlc_dataclasses.dataclass
@@ -74,6 +87,7 @@ class Metadata(Node):
         default=None,
         description="The date the dataset was initially created.",
         input_types=[SDO.Date, SDO.DateTime],
+        to_jsonld=_date_to_jsonld,
         url=constants.SCHEMA_ORG_DATE_CREATED,
     )
     date_modified: datetime.datetime | None = mlc_dataclasses.jsonld_field(
@@ -81,6 +95,7 @@ class Metadata(Node):
         default=None,
         description="The date the dataset was last modified.",
         input_types=[SDO.Date, SDO.DateTime],
+        to_jsonld=_date_to_jsonld,
         url=constants.SCHEMA_ORG_DATE_MODIFIED,
     )
     date_published: datetime.datetime | None = mlc_dataclasses.jsonld_field(
@@ -88,6 +103,7 @@ class Metadata(Node):
         default=None,
         description="The date the dataset was published.",
         input_types=[SDO.Date, SDO.DateTime],
+        to_jsonld=_date_to_jsonld,
         url=constants.SCHEMA_ORG_DATE_PUBLISHED,
     )
     description: str | dict[str, str] | None = mlc_dataclasses.jsonld_field(
@@ -177,6 +193,13 @@ class Metadata(Node):
         input_types=[SDO.Integer, SDO.Number, SDO.Text],
         url=constants.SCHEMA_ORG_VERSION,
     )
+    sd_version: str | None = mlc_dataclasses.jsonld_field(
+        cast_fn=cast_version,
+        default=None,
+        description="The version of the dataset metadata.",
+        input_types=[SDO.Integer, SDO.Number, SDO.Text],
+        url=constants.ML_COMMONS_SD_VERSION,
+    )
     distribution: list[FileObject | FileSet] = mlc_dataclasses.jsonld_field(
         cardinality="MANY",
         default_factory=list,
@@ -219,6 +242,7 @@ class Metadata(Node):
             cast_fn=cast_dates,
             default=None,
             input_types=[SDO.Date, SDO.DateTime],
+            to_jsonld=_dates_to_jsonld,
             url=constants.ML_COMMONS_RAI_DATA_COLLECTION_TIME_FRAME,
         )
     )
@@ -435,10 +459,6 @@ class Metadata(Node):
         The rules are the following:
         - The graph is directed.
         - All fields have a data type: either directly specified, or on a parent.
-
-        Args:
-            issues: The issues to populate in case of problem.
-            graph: The structure graph to be checked.
         """
         # Check that the graph is directed.
         if not self.ctx.graph.is_directed():
@@ -452,9 +472,7 @@ class Metadata(Node):
     def from_file(cls, ctx: Context, file: epath.PathLike) -> Self:
         """Creates the Metadata from a Croissant file."""
         if is_url(file):
-            response = requests.get(file)
-            json_ = response.json()
-            return cls.from_json(ctx=ctx, json_=json_)
+            return cls.from_json(ctx=ctx, json_=requests.get(file).json())
         folder, json_ = from_file_to_json(file)
         ctx.folder = folder
         return cls.from_json(ctx=ctx, json_=json_)
@@ -467,5 +485,4 @@ class Metadata(Node):
     ) -> Self:
         """Creates a `Metadata` from JSON."""
         ctx.rdf = Rdf.from_json(ctx, json_)
-        jsonld = expand_jsonld(json_, ctx=ctx)
-        return cls.from_jsonld(ctx=ctx, jsonld=jsonld)
+        return cls.from_jsonld(ctx=ctx, jsonld=expand_jsonld(json_, ctx=ctx))

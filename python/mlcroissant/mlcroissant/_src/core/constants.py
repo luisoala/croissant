@@ -66,6 +66,7 @@ ML_COMMONS_PATH = lambda ctx: ML_COMMONS(ctx).path
 ML_COMMONS_PERSONAL_SENSITVE_INFORMATION = lambda ctx: ML_COMMONS(
     ctx
 ).personalSensitiveInformation
+ML_COMMONS_READLINES = lambda ctx: ML_COMMONS(ctx).readLines
 ML_COMMONS_RECORD_SET = lambda ctx: ML_COMMONS(ctx).recordSet
 ML_COMMONS_RECORD_SET_TYPE = lambda ctx: ML_COMMONS(ctx).RecordSet
 ML_COMMONS_REFERENCES = lambda ctx: ML_COMMONS(ctx).references
@@ -74,11 +75,13 @@ ML_COMMONS_REPEATED = lambda ctx: ML_COMMONS(ctx).repeated
 # ML_COMMONS.replace is understood as the `replace` method on the class Namespace.
 ML_COMMONS_REPLACE = lambda ctx: ML_COMMONS(ctx)["replace"]
 ML_COMMONS_SAMPLING_RATE = lambda ctx: ML_COMMONS(ctx).samplingRate
+ML_COMMONS_SD_VERSION = lambda ctx: ML_COMMONS(ctx).sdVersion
 ML_COMMONS_SEPARATOR = lambda ctx: ML_COMMONS(ctx).separator
 ML_COMMONS_SOURCE = lambda ctx: ML_COMMONS(ctx).source
 ML_COMMONS_SUB_FIELD = lambda ctx: ML_COMMONS(ctx).subField
 ML_COMMONS_SUB_FIELD_TYPE = lambda ctx: ML_COMMONS(ctx).SubField
 ML_COMMONS_TRANSFORM = lambda ctx: ML_COMMONS(ctx).transform
+ML_COMMONS_UNARCHIVE = lambda ctx: ML_COMMONS(ctx).unArchive
 
 # Croissant RAI extension
 # V1.0 namespace
@@ -185,6 +188,7 @@ TO_CROISSANT = lambda ctx: {
     ML_COMMONS_SAMPLING_RATE(ctx): "sampling_rate",
     ML_COMMONS_SEPARATOR(ctx): "separator",
     ML_COMMONS_SOURCE(ctx): "source",
+    ML_COMMONS_SD_VERSION(ctx): "sd_version",
     ML_COMMONS_TRANSFORM(ctx): "transforms",
     DCTERMS_CONFORMS_TO: "conforms_to",
     SCHEMA_ORG_CONTENT_SIZE: "content_size",
