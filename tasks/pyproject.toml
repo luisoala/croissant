@@ -9,6 +9,7 @@ description = "A validator and toolkit for Croissant Tasks"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
+    "etils",
     "pyshacl",
     "rdflib"
 ]
