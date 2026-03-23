@@ -1,0 +1,142 @@
+@prefix schema: <https://schema.org/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix croissant: <http://mlcommons.org/croissant/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# -----------------------------------------------------------------------------
+# Base Task Shape
+# -----------------------------------------------------------------------------
+croissant:TaskShape
+  a sh:NodeShape ;
+  sh:targetClass croissant:Task ;
+  sh:property [
+    sh:path croissant:input ;
+    sh:or (
+      [ sh:class croissant:Dataset ]
+      [ sh:class schema:Dataset ]
+      [ sh:nodeKind sh:IRI ]
+      [ sh:class croissant:InputSpec ]
+    ) ;
+    sh:message "croissant:input must point to a Dataset, URL, or InputSpec."
+  ] ;
+  sh:property [
+    sh:path croissant:output ;
+    sh:or (
+      [ sh:class schema:Dataset ]
+      [ sh:class schema:SoftwareSourceCode ]
+      [ sh:class croissant:OutputSpec ]
+    ) ;
+    sh:message "croissant:output must point to a Dataset, SoftwareSourceCode, or OutputSpec."
+  ] ;
+  sh:property [
+    sh:path croissant:implementation ;
+    sh:or (
+      [ sh:class schema:SoftwareApplication ]
+      [ sh:class schema:SoftwareSourceCode ]
+      [ sh:class croissant:ImplementationSpec ]
+    ) ;
+    sh:message "croissant:implementation must point to a SoftwareApplication, SoftwareSourceCode, or ImplementationSpec."
+  ] ;
+  sh:property [
+    sh:path croissant:execution ;
+    sh:class croissant:ExecutionInfo ;
+    sh:message "croissant:execution must point to an ExecutionInfo."
+  ] ;
+  sh:property [
+    sh:path croissant:evaluation ;
+    sh:class croissant:EvaluationTask ;
+    sh:message "croissant:evaluation must point to an EvaluationTask."
+  ] ;  
+  sh:property [
+    sh:path croissant:subTask ;
+    sh:class croissant:Task ;
+    sh:message "croissant:subTask must point to a Task."
+  ] .
+
+# -----------------------------------------------------------------------------
+# TaskProblem Shape
+# -----------------------------------------------------------------------------
+croissant:TaskProblemShape
+  a sh:NodeShape ;
+  sh:targetClass croissant:TaskProblem ;
+  # A TaskProblem must have at least one output Spec so the problem is well-defined
+  sh:property [
+    sh:path croissant:output ;
+    sh:class croissant:OutputSpec ;
+    sh:minCount 1 ;
+    sh:message "A TaskProblem must specify its expected output using a generic OutputSpec."
+  ] .
+
+# -----------------------------------------------------------------------------
+# TaskSolution Shape
+# -----------------------------------------------------------------------------
+croissant:TaskSolutionShape
+  a sh:NodeShape ;
+  sh:targetClass croissant:TaskSolution ;
+  sh:property [
+    sh:path schema:isBasedOn ;
+    sh:or (
+      [ sh:class croissant:TaskProblem ]
+      [ sh:nodeKind sh:IRI ]
+    ) ;
+    sh:minCount 1 ;
+    sh:message "A TaskSolution must be formally linked to a TaskProblem via schema:isBasedOn."
+  ] ;
+  sh:property [
+    sh:path croissant:implementation ;
+    sh:or (
+      [ sh:class schema:SoftwareApplication ]
+      [ sh:class schema:SoftwareSourceCode ]
+    ) ;
+    sh:minCount 1 ;
+    sh:message "A TaskSolution must provide a concrete implementation."
+  ] ;
+  sh:property [
+    sh:path croissant:output ;
+    sh:or (
+      [ sh:class schema:Dataset ]
+      [ sh:class schema:SoftwareSourceCode ]
+    ) ;
+    sh:message "A TaskSolution's output must be concrete (e.g., a schema:Dataset or SoftwareSourceCode), not an OutputSpec."
+  ] .
+
+# -----------------------------------------------------------------------------
+# Spec Shapes
+# -----------------------------------------------------------------------------
+croissant:InputSpecShape
+  a sh:NodeShape ;
+  sh:targetClass croissant:InputSpec ;
+  sh:property [
+    sh:path croissant:schema ;
+    sh:class croissant:RecordSet ;
+    sh:message "croissant:schema must point to a RecordSet."
+  ] .
+croissant:OutputSpecShape
+  a sh:NodeShape ;
+  sh:targetClass croissant:OutputSpec ;
+  sh:property [
+    sh:path croissant:schema ;
+    sh:class croissant:RecordSet ;
+    sh:message "croissant:schema must point to a RecordSet."
+  ] .
+croissant:ImplementationSpecShape
+  a sh:NodeShape ;
+  sh:targetClass croissant:ImplementationSpec ;
+  sh:property [
+    sh:path croissant:tests ;
+    sh:or (
+      [ sh:class croissant:Test ]
+      [ sh:nodeKind sh:IRI ]
+    ) ;
+    sh:message "croissant:tests must point to a Test or URL."
+  ] ;
+  sh:property [
+    sh:path croissant:environment ;
+    sh:or (
+      [ sh:class schema:CreativeWork ]
+      [ sh:nodeKind sh:IRI ]
+    ) ;
+    sh:message "croissant:environment must point to a CreativeWork or URL."
+  ] .

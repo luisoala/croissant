@@ -1,0 +1,35 @@
+import unittest
+from validator import validate_data
+
+
+class TestCroissantTasksValidator(unittest.TestCase):
+
+  def test_valid_problem(self):
+    conforms, _ = validate_data("testdata/valid_problem.jsonld")
+    self.assertTrue(conforms, "Valid problem should pass validation.")
+
+  def test_invalid_problem(self):
+    conforms, text = validate_data("testdata/invalid_problem.jsonld")
+    self.assertFalse(conforms, "Problem with concrete output should fail.")
+    self.assertIn(
+        "A TaskProblem must specify its expected output using a generic"
+        " OutputSpec.",
+        text,
+    )
+
+  def test_valid_solution(self):
+    conforms, _ = validate_data("testdata/valid_solution.jsonld")
+    self.assertTrue(conforms, "Valid solution should pass validation.")
+
+  def test_invalid_solution(self):
+    conforms, text = validate_data("testdata/invalid_solution.jsonld")
+    self.assertFalse(conforms, "Solution without schema:isBasedOn should fail.")
+    self.assertIn(
+        "A TaskSolution must be formally linked to a TaskProblem via"
+        " schema:isBasedOn",
+        text,
+    )
+
+
+if __name__ == "__main__":
+  unittest.main()
