@@ -86,7 +86,23 @@ croissant:TaskSolutionShape
     ) ;
     sh:minCount 1 ;
     sh:message "A TaskSolution must be formally linked to a TaskProblem via schema:isBasedOn."
-  ] .
+  ] ;
+  sh:property [
+    sh:path croissant:input ;
+    sh:not [ sh:class croissant:InputSpec ] ;
+    sh:message "A TaskSolution cannot have an InputSpec as input." ;
+  ] ;
+  sh:property [
+    sh:path croissant:output ;
+    sh:not [ sh:class croissant:OutputSpec ] ;
+    sh:message "A TaskSolution cannot have an OutputSpec as output." ;
+  ] ;
+  sh:property [
+    sh:path croissant:implementation ;
+    sh:not [ sh:class croissant:ImplementationSpec ] ;
+    sh:message "A TaskSolution cannot have an ImplementationSpec as implementation." ;
+   ] .
+
 
 # -----------------------------------------------------------------------------
 # Spec Shapes
