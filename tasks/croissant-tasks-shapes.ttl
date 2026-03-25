@@ -61,12 +61,15 @@ croissant:TaskShape
 croissant:TaskProblemShape
   a sh:NodeShape ;
   sh:targetClass croissant:TaskProblem ;
-  # A TaskProblem must have at least one output Spec so the problem is well-defined
+  # A TaskProblem must have at least one property that is a spec class
   sh:property [
-    sh:path croissant:output ;
-    sh:class croissant:OutputSpec ;
+    sh:or (
+      [ sh:path croissant:input ; sh:class croissant:InputSpec ]
+      [ sh:path croissant:output ; sh:class croissant:OutputSpec ]
+      [ sh:path croissant:implementation ; sh:class croissant:ImplementationSpec ]
+    ) ;
     sh:minCount 1 ;
-    sh:message "A TaskProblem must specify its expected output using a generic OutputSpec."
+    sh:message "A TaskProblem must have at least one property (input, output, or implementation) that is a spec class (InputSpec, OutputSpec, or ImplementationSpec)."
   ] .
 
 # -----------------------------------------------------------------------------
@@ -83,23 +86,6 @@ croissant:TaskSolutionShape
     ) ;
     sh:minCount 1 ;
     sh:message "A TaskSolution must be formally linked to a TaskProblem via schema:isBasedOn."
-  ] ;
-  sh:property [
-    sh:path croissant:implementation ;
-    sh:or (
-      [ sh:class schema:SoftwareApplication ]
-      [ sh:class schema:SoftwareSourceCode ]
-    ) ;
-    sh:minCount 1 ;
-    sh:message "A TaskSolution must provide a concrete implementation."
-  ] ;
-  sh:property [
-    sh:path croissant:output ;
-    sh:or (
-      [ sh:class schema:Dataset ]
-      [ sh:class schema:SoftwareSourceCode ]
-    ) ;
-    sh:message "A TaskSolution's output must be concrete (e.g., a schema:Dataset or SoftwareSourceCode), not an OutputSpec."
   ] .
 
 # -----------------------------------------------------------------------------
