@@ -70,6 +70,19 @@ croissant:TaskProblemShape
     ) ;
     sh:minCount 1 ;
     sh:message "A TaskProblem must have at least one property (input, output, or implementation) that is a spec class (InputSpec, OutputSpec, or ImplementationSpec)."
+  ] ;
+  sh:property [
+    sh:path croissant:execution ;
+    sh:class croissant:ExecutionSpec ;
+    sh:message "Execution property of a TaskProblem must be an ExecutionSpec."
+  ] ;
+  sh:property [
+    sh:path croissant:evaluation ;
+    sh:or (
+      [ sh:class croissant:EvaluationTask ]
+      [ sh:class croissant:EvaluationSpec ]
+    ) ;
+    sh:message "Evaluation property of a TaskProblem must be an EvaluationTask or EvaluationSpec."
   ] .
 
 # -----------------------------------------------------------------------------
@@ -101,7 +114,53 @@ croissant:TaskSolutionShape
     sh:path croissant:implementation ;
     sh:not [ sh:class croissant:ImplementationSpec ] ;
     sh:message "A TaskSolution cannot have an ImplementationSpec as implementation." ;
-   ] .
+  ] ;
+  sh:property [
+    sh:path croissant:evaluation ;
+    sh:not [ sh:class croissant:EvaluationSpec ] ;
+    sh:message "A TaskSolution cannot have an EvaluationSpec as evaluation." ;
+  ] ;
+  sh:or (
+    # Option 1: Direct concrete implementation
+    [
+      sh:property [
+        sh:path croissant:implementation ;
+        sh:qualifiedValueShape [
+          sh:not [ sh:class croissant:ImplementationSpec ]
+        ] ;
+        sh:qualifiedMinCount 1 ;
+        sh:message "TaskSolution must have at least one concrete implementation if it has no subTasks." ;
+      ]
+    ]
+    # Option 2: All subtasks have concrete implementations
+    [
+      sh:and (
+        [
+          sh:property [
+            sh:path croissant:subTask ;
+            sh:minCount 1 ;
+            sh:message "TaskSolution without direct concrete implementation must have at least one subTask." ;
+          ]
+        ]
+        [
+          sh:property [
+            sh:path croissant:subTask ;
+            sh:node [
+              a sh:NodeShape ;
+              sh:property [
+                sh:path croissant:implementation ;
+                sh:qualifiedValueShape [
+                  sh:not [ sh:class croissant:ImplementationSpec ]
+                ] ;
+                sh:qualifiedMinCount 1 ;
+                sh:message "All subTasks of a TaskSolution must have a concrete implementation." ;
+              ]
+            ]
+          ]
+        ]
+      )
+    ]
+  ) .
 
 
 # -----------------------------------------------------------------------------
@@ -142,3 +201,50 @@ croissant:ImplementationSpecShape
     ) ;
     sh:message "croissant:environment must point to a CreativeWork or URL."
   ] .
+
+# -----------------------------------------------------------------------------
+# EvaluationResult Shape
+# -----------------------------------------------------------------------------
+croissant:EvaluationResultShape
+  a sh:NodeShape ;
+  sh:targetClass croissant:EvaluationResult ;
+  sh:property [
+    sh:path croissant:metric ;
+    sh:or (
+      [ sh:datatype xsd:string ]
+      [ sh:nodeKind sh:IRI ]
+    ) ;
+    sh:minCount 1 ;
+    sh:message "croissant:metric must be a string or a URL, and is required."
+  ] ;
+  sh:property [
+    sh:path croissant:value ;
+    sh:or (
+      [ sh:class schema:QuantitativeValue ]
+      [ sh:datatype xsd:string ]
+      [ sh:datatype xsd:decimal ]
+      [ sh:datatype xsd:integer ]
+    ) ;
+    sh:minCount 1 ;
+    sh:message "croissant:value must be a QuantitativeValue, string, or number, and is required."
+  ] .
+
+# -----------------------------------------------------------------------------
+# EvaluationTask Shape
+# -----------------------------------------------------------------------------
+croissant:EvaluationTaskShape
+  a sh:NodeShape ;
+  sh:targetClass croissant:EvaluationTask ;
+  sh:property [
+    sh:path croissant:evaluationResults ;
+    sh:class croissant:EvaluationResult ;
+    sh:message "croissant:evaluationResults must point to an EvaluationResult."
+  ] ;
+  sh:property [
+    sh:path croissant:evaluatedSolution ;
+    sh:class croissant:TaskSolution ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:message "croissant:evaluatedSolution must point to exactly one TaskSolution."
+  ] .
+

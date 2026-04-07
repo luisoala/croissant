@@ -20,11 +20,20 @@ croissant:TaskSolution a rdf:Class ;
   rdfs:comment "A TaskSolution represents a specific, concrete answer to a TaskProblem. It provides the actual values for the components that were marked as Specs in the problem definition. A TaskSolution inherits all properties from cr:Task to describe the concrete components of the solution." ;
   rdfs:subClassOf croissant:Task .
 
+croissant:EvaluationTask a rdf:Class ;
+  rdfs:label "EvaluationTask" ;
+  rdfs:comment "A specialization of cr:Task that includes evaluation-specific information, such as metrics and results." ;
+  rdfs:subClassOf croissant:Task .
+
+croissant:EvaluationResult a rdf:Class ;
+  rdfs:label "EvaluationResult" ;
+  rdfs:comment "A structured result of an evaluation, pairing a metric with its value." .
+
 # Task properties
 
 croissant:input a rdf:Property ;
   rdfs:label "input" ;
-  rdfs:comment "The primary data used as input for the task, typically provided as a Croissant dataset. This field can be repeated in case of multiple input datasets." ;
+  rdfs:comment "The primary data used as input for the task, typically provided as a Croissant dataset. This field can be repeated in case of multiple inputs." ;
   schema:domainIncludes croissant:Task ;  
   schema:rangeIncludes croissant:Dataset, schema:Dataset, schema:URL, croissant:InputSpec .
 
@@ -44,19 +53,45 @@ croissant:execution a rdf:Property ;
   rdfs:label "execution" ;
   rdfs:comment "Information about the execution of the task." ;
   schema:domainIncludes croissant:Task ;  
-  schema:rangeIncludes croissant:ExecutionInfo .
+  schema:rangeIncludes croissant:ExecutionInfo, croissant:ExecutionSpec .
 
 croissant:evaluation a rdf:Property ;
   rdfs:label "evaluation" ;
   rdfs:comment "The evaluation of the task, represented as another task." ;
   schema:domainIncludes croissant:Task ;  
-  schema:rangeIncludes croissant:EvaluationTask .
+  schema:rangeIncludes croissant:EvaluationTask, croissant:EvaluationSpec .
 
 croissant:subTask a rdf:Property ;
   rdfs:label "subTask" ;
   rdfs:comment "One or more subtasks that are part of the definition of this task." ;
   schema:domainIncludes croissant:Task ;  
   schema:rangeIncludes croissant:Task .
+
+# Evaluation properties
+
+croissant:evaluationResults a rdf:Property ;
+  rdfs:label "evaluationResults" ;
+  rdfs:comment "The results of the evaluation, represented as instances of cr:EvaluationResult." ;
+  schema:domainIncludes croissant:EvaluationTask ;
+  schema:rangeIncludes croissant:EvaluationResult .
+
+croissant:evaluatedSolution a rdf:Property ;
+  rdfs:label "evaluatedSolution" ;
+  rdfs:comment "The TaskSolution that was evaluated." ;
+  schema:domainIncludes croissant:EvaluationTask ;
+  schema:rangeIncludes croissant:TaskSolution .
+
+croissant:metric a rdf:Property ;
+  rdfs:label "metric" ;
+  rdfs:comment "The metric used for a specific result." ;
+  schema:domainIncludes croissant:EvaluationResult ;
+  schema:rangeIncludes schema:Text, schema:URL .
+
+croissant:value a rdf:Property ;
+  rdfs:label "value" ;
+  rdfs:comment "The value of the result." ;
+  schema:domainIncludes croissant:EvaluationResult ;
+  schema:rangeIncludes schema:QuantitativeValue, schema:Text, schema:Number .
 
 # Reusing schema:isBasedOn to link a TaskSolution to the TaskProblem it solves.
 schema:isBasedOn schema:domainIncludes croissant:TaskSolution ;
@@ -79,6 +114,14 @@ croissant:ImplementationSpec a rdf:Class ;
   rdfs:label "ImplementationSpec" ;
   rdfs:comment "Specifies the technical requirements for a solution's implementation (e.g., code, model)." ;
   rdfs:subClassOf schema:SoftwareApplication .
+
+croissant:ExecutionSpec a rdf:Class ;
+  rdfs:label "ExecutionSpec" ;
+  rdfs:comment "A placeholder for execution information that has not yet been logged because an experiment has not yet been run." .
+
+croissant:EvaluationSpec a rdf:Class ;
+  rdfs:label "EvaluationSpec" ;
+  rdfs:comment "A placeholder for evaluation metrics that have not been specified for that task." .
 
 # Spec properties
 
