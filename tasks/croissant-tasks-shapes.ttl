@@ -41,8 +41,12 @@ croissant:TaskShape
   ] ;
   sh:property [
     sh:path croissant:execution ;
-    sh:class croissant:ExecutionInfo ;
-    sh:message "croissant:execution must point to an ExecutionInfo."
+    sh:or (
+      [ sh:class croissant:ExecutionInfo ]
+      [ sh:class croissant:ExecutionConfig ]
+      [ sh:class croissant:ExecutionTrace ]
+    ) ;
+    sh:message "croissant:execution must point to an ExecutionInfo, ExecutionConfig, or ExecutionTrace."
   ] ;
   sh:property [
     sh:path croissant:evaluation ;
@@ -182,6 +186,23 @@ croissant:OutputSpecShape
     sh:class croissant:RecordSet ;
     sh:message "croissant:schema must point to a RecordSet."
   ] .
+
+croissant:EvaluationSpecShape
+  a sh:NodeShape ;
+  sh:targetClass croissant:EvaluationSpec ;
+  sh:property [
+    sh:path croissant:expectedMetric ;
+    sh:or (
+      [ sh:datatype xsd:string ]
+      [ sh:nodeKind sh:IRI ]
+    ) ;
+    sh:message "croissant:expectedMetric must be a string or a URL."
+  ] ;
+  sh:property [
+    sh:path croissant:metric ;
+    sh:maxCount 0 ;
+    sh:message "croissant:metric cannot be used on EvaluationSpec. Use expectedMetric instead."
+  ] .
 croissant:ImplementationSpecShape
   a sh:NodeShape ;
   sh:targetClass croissant:ImplementationSpec ;
@@ -200,6 +221,16 @@ croissant:ImplementationSpecShape
       [ sh:nodeKind sh:IRI ]
     ) ;
     sh:message "croissant:environment must point to a CreativeWork or URL."
+  ] .
+
+croissant:TestShape
+  a sh:NodeShape ;
+  sh:targetClass croissant:Test ;
+  sh:property [
+    sh:path croissant:testCommand ;
+    sh:datatype xsd:string ;
+    sh:minCount 1 ;
+    sh:message "A Test must have a testCommand (string)."
   ] .
 
 # -----------------------------------------------------------------------------
@@ -246,5 +277,28 @@ croissant:EvaluationTaskShape
     sh:minCount 1 ;
     sh:maxCount 1 ;
     sh:message "croissant:evaluatedSolution must point to exactly one TaskSolution."
+  ] .
+
+# -----------------------------------------------------------------------------
+# RecordSet and Field Shapes
+# -----------------------------------------------------------------------------
+croissant:RecordSetShape
+  a sh:NodeShape ;
+  sh:targetClass croissant:RecordSet ;
+  sh:property [
+    sh:path croissant:field ;
+    sh:class croissant:Field ;
+    sh:minCount 1 ;
+    sh:message "A RecordSet must have at least one field."
+  ] .
+
+croissant:FieldShape
+  a sh:NodeShape ;
+  sh:targetClass croissant:Field ;
+  sh:property [
+    sh:path croissant:dataType ;
+    sh:nodeKind sh:IRI ;
+    sh:minCount 1 ;
+    sh:message "A Field must have a dataType."
   ] .
 
