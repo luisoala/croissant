@@ -1,3 +1,9 @@
+---
+name: pdf2ct
+description: >-
+  Converts academic papers (PDFs) describing machine learning benchmarks or tasks into MLCommons Croissant Tasks JSON-LD files. Use when you need to extract task definitions, inputs, outputs, evaluation metrics, and baseline results from a paper and represent them in Croissant Tasks format. Don't use for general PDF text extraction or dataset metadata (use Croissant Datasets for that).
+---
+
 # PDF to MLCommons Croissant **Tasks** — Agent Runbook
 
 ## Objective
@@ -7,7 +13,7 @@ You are given an academic paper (PDF) that introduces a machine learning **bench
 1. Exactly one **`TaskProblem`** describing the benchmark abstractly (inputs, expected outputs, evaluation metrics, subtasks).
 2. Zero or more **`TaskSolution`** files — one per concrete model/approach the paper evaluates (with hyperparameters and `EvaluationResult`s).
 
-Validate every file with the Croissant Tasks SHACL validator (`pyshacl` + the shapes/ontology at commit `f751227`), iterate up to 3 rounds to fix validation errors, and write an executive summary + validation report.
+Validate every file with the Croissant Tasks SHACL validator (`pyshacl` + the shapes/ontology from the latest commit in PR #1017), iterate up to 3 rounds to fix validation errors, and write an executive summary + validation report.
 
 Croissant Tasks is distinct from Croissant Datasets. The agent emits **task descriptions**, not dataset metadata. If the paper is purely a dataset (no defined task/benchmark), flag that in the summary and still emit the best possible `TaskProblem` using `InputSpec`.
 
@@ -48,7 +54,7 @@ If you finish your analysis but have not written all files, go back and write th
 | Parameter | Template Variable | Default | Description |
 |-----------|------------------|---------|-------------|
 | Results directory | `{{results_dir}}` | `/app/results` (Jetty) / `./results` (local) | Output directory for all results |
-| PDF filename | `{{pdf_filename}}` | — | The uploaded PDF (available at `/app/uploads/{{pdf_filename}}` on Jetty) |
+| PDF location | `{{pdf_location}}` | — | The location of the PDF to convert (local path or URL), specified in the user prompt. |
 | Paper URL | `{{paper_url}}` | (empty) | Optional arXiv/DOI URL — used to derive stable `@id` base IRIs |
 | Dataset URL | `{{dataset_url}}` | (empty) | Optional canonical dataset URL (HuggingFace, GitHub) used as the task's `croissant:input` |
 | Croissant Tasks README | — | `README.md` | Reference for the Croissant Tasks specification and usage |
@@ -61,10 +67,10 @@ If you finish your analysis but have not written all files, go back and write th
 |------------|------|----------|-------------|
 | pyshacl | Python package | Yes | SHACL validator engine |
 | rdflib | Python package | Yes | RDF graph parser (pulls in JSON-LD support) |
-| Croissant Tasks shapes TTL | File | Yes | `croissant-tasks-shapes.ttl` from mlcommons/croissant@f751227 |
-| Croissant Tasks ontology TTL | File | Yes | `croissant-tasks.ttl` from mlcommons/croissant@f751227 |
+| Croissant Tasks shapes TTL | File | Yes | `croissant-tasks-shapes.ttl` from the latest commit in PR #1017 |
+| Croissant Tasks ontology TTL | File | Yes | `croissant-tasks.ttl` from the latest commit in PR #1017 |
 
-Pinned commit: `f751227d78f2ae1cee3802a0db7e2cdc36e6da32`
+Use the latest commit in PR #1017.
 
 ---
 
@@ -78,13 +84,16 @@ pip install pyshacl rdflib
 mkdir -p {{results_dir}}/solutions
 
 # Download the Croissant Tasks shapes + ontology at the pinned commit
-COMMIT=f751227d78f2ae1cee3802a0db7e2cdc36e6da32
+# Use the latest commit in PR #1017
+COMMIT=<latest_commit_in_PR_1017>
 BASE=https://raw.githubusercontent.com/mlcommons/croissant/${COMMIT}/tasks
 curl -fsSL "${BASE}/croissant-tasks-shapes.ttl" -o {{results_dir}}/croissant-tasks-shapes.ttl
 curl -fsSL "${BASE}/croissant-tasks.ttl"        -o {{results_dir}}/croissant-tasks.ttl
 
-# Verify the PDF exists
-ls -la /app/uploads/{{pdf_filename}} 2>/dev/null || ls -la {{pdf_filename}}
+# Verify the PDF exists (local path) or download it if it's a URL
+# The location will be specified in the user prompt.
+# Example for local file: ls -la {{pdf_location}}
+# Example for URL: curl -fsSL {{pdf_location}} -o paper.pdf
 ```
 
 Verify all required inputs and dependency files are present before proceeding.
@@ -268,13 +277,9 @@ For each sub-category:
 
 **Deduplication trick** (from the MMLU example): define `OutputSpec` / `EvaluationSpec` once at the parent with a concrete `@id`, then reference by `{ "@id": "<same_id>" }` in every subtask. Do NOT repeat the inner body.
 
-### Full reference example — structure of MMLU
+### Reference Examples
 
-See the in-repo reference: `/tmp/croissant_examples/mmlu/mmlu_problem.jsonld` (downloaded in Step 1 if you ran the curl commands below). It shows a root `TaskProblem` with 13 `subTask`s, deduplicated `OutputSpec` and `EvaluationSpec`. Fetch it on demand:
-
-```bash
-curl -fsSL "https://raw.githubusercontent.com/mlcommons/croissant/f751227d78f2ae1cee3802a0db7e2cdc36e6da32/tasks/benchmark_examples/mmlu/mmlu_problem.jsonld"
-```
+Check the `tasks/benchmark_examples/` directory in the repository for examples of Croissant Tasks files (such as MMLU). These examples show how to structure `TaskProblem` and `TaskSolution` files for different types of benchmarks, including usage of subtasks and deduplication. You can fetch them on demand from the repository.
 
 ---
 
@@ -469,7 +474,7 @@ Write `{{results_dir}}/summary.md`:
 ## Overview
 - **Date**: <run date>
 - **Paper**: <title, authors>
-- **PDF**: {{pdf_filename}}
+- **PDF**: {{pdf_location}}
 - **Paper URL**: {{paper_url}}
 - **Dataset URL**: {{dataset_url}}
 - **@id base**: <what you chose>
@@ -531,7 +536,7 @@ Write `{{results_dir}}/validation_report.json`:
   "version": "1.0.0",
   "run_date": "<ISO8601>",
   "parameters": {
-    "pdf_filename":  "{{pdf_filename}}",
+    "pdf_location":  "{{pdf_location}}",
     "paper_url":     "{{paper_url}}",
     "dataset_url":   "{{dataset_url}}"
   },
