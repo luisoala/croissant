@@ -1,3 +1,9 @@
+---
+name: pdf2ct
+description: >-
+  Converts academic papers (PDFs) describing machine learning benchmarks or tasks into MLCommons Croissant Tasks JSON-LD files. Use when you need to extract task definitions, inputs, outputs, evaluation metrics, and baseline results from a paper and represent them in Croissant Tasks format. Don't use for general PDF text extraction or dataset metadata (use Croissant Datasets for that).
+---
+
 # PDF to MLCommons Croissant **Tasks** — Agent Runbook
 
 ## Objective
@@ -7,7 +13,7 @@ You are given an academic paper (PDF) that introduces a machine learning **bench
 1. Exactly one **`TaskProblem`** describing the benchmark abstractly (inputs, expected outputs, evaluation metrics, subtasks).
 2. Zero or more **`TaskSolution`** files — one per concrete model/approach the paper evaluates (with hyperparameters and `EvaluationResult`s).
 
-Validate every file with the Croissant Tasks SHACL validator (`pyshacl` + the shapes/ontology at commit `f751227`), iterate up to 3 rounds to fix validation errors, and write an executive summary + validation report.
+Validate every file with the Croissant Tasks SHACL validator (`pyshacl` + the shapes/ontology from the latest commit in PR #1017), iterate up to 3 rounds to fix validation errors, and write an executive summary + validation report.
 
 Croissant Tasks is distinct from Croissant Datasets. The agent emits **task descriptions**, not dataset metadata. If the paper is purely a dataset (no defined task/benchmark), flag that in the summary and still emit the best possible `TaskProblem` using `InputSpec`.
 
@@ -48,10 +54,10 @@ If you finish your analysis but have not written all files, go back and write th
 | Parameter | Template Variable | Default | Description |
 |-----------|------------------|---------|-------------|
 | Results directory | `{{results_dir}}` | `/app/results` (Jetty) / `./results` (local) | Output directory for all results |
-| PDF filename | `{{pdf_filename}}` | — | The uploaded PDF (available at `/app/uploads/{{pdf_filename}}` on Jetty) |
+| PDF location | `{{pdf_location}}` | — | The location of the PDF to convert (local path or URL), specified in the user prompt. |
 | Paper URL | `{{paper_url}}` | (empty) | Optional arXiv/DOI URL — used to derive stable `@id` base IRIs |
 | Dataset URL | `{{dataset_url}}` | (empty) | Optional canonical dataset URL (HuggingFace, GitHub) used as the task's `croissant:input` |
-| Croissant Tasks README | — | `README.md` | Reference for the Croissant Tasks specification and usage |
+| Croissant Tasks README | — | `README.md` at the latest commit in PR #1017 | Primary readable description of the specification that you should use as principle. |
 
 ---
 
@@ -61,10 +67,11 @@ If you finish your analysis but have not written all files, go back and write th
 |------------|------|----------|-------------|
 | pyshacl | Python package | Yes | SHACL validator engine |
 | rdflib | Python package | Yes | RDF graph parser (pulls in JSON-LD support) |
-| Croissant Tasks shapes TTL | File | Yes | `croissant-tasks-shapes.ttl` from mlcommons/croissant@f751227 |
-| Croissant Tasks ontology TTL | File | Yes | `croissant-tasks.ttl` from mlcommons/croissant@f751227 |
+| Croissant Tasks shapes TTL | File | Yes | `croissant-tasks-shapes.ttl` from the latest commit in PR #1017 |
+| Croissant Tasks ontology TTL | File | Yes | `croissant-tasks.ttl` from the latest commit in PR #1017 |
+| Python Validator | File | Yes | Python validator script available in the latest commit of PR #1017 (e.g., `validator.py`) |
 
-Pinned commit: `f751227d78f2ae1cee3802a0db7e2cdc36e6da32`
+Use the latest commit in PR #1017.
 
 ---
 
@@ -78,13 +85,16 @@ pip install pyshacl rdflib
 mkdir -p {{results_dir}}/solutions
 
 # Download the Croissant Tasks shapes + ontology at the pinned commit
-COMMIT=f751227d78f2ae1cee3802a0db7e2cdc36e6da32
+# Use the latest commit in PR #1017
+COMMIT=<latest_commit_in_PR_1017>
 BASE=https://raw.githubusercontent.com/mlcommons/croissant/${COMMIT}/tasks
 curl -fsSL "${BASE}/croissant-tasks-shapes.ttl" -o {{results_dir}}/croissant-tasks-shapes.ttl
 curl -fsSL "${BASE}/croissant-tasks.ttl"        -o {{results_dir}}/croissant-tasks.ttl
 
-# Verify the PDF exists
-ls -la /app/uploads/{{pdf_filename}} 2>/dev/null || ls -la {{pdf_filename}}
+# Verify the PDF exists (local path) or download it if it's a URL
+# The location will be specified in the user prompt.
+# Example for local file: ls -la {{pdf_location}}
+# Example for URL: curl -fsSL {{pdf_location}} -o paper.pdf
 ```
 
 Verify all required inputs and dependency files are present before proceeding.
@@ -268,13 +278,9 @@ For each sub-category:
 
 **Deduplication trick** (from the MMLU example): define `OutputSpec` / `EvaluationSpec` once at the parent with a concrete `@id`, then reference by `{ "@id": "<same_id>" }` in every subtask. Do NOT repeat the inner body.
 
-### Full reference example — structure of MMLU
+### Reference Examples
 
-See the in-repo reference: `/tmp/croissant_examples/mmlu/mmlu_problem.jsonld` (downloaded in Step 1 if you ran the curl commands below). It shows a root `TaskProblem` with 13 `subTask`s, deduplicated `OutputSpec` and `EvaluationSpec`. Fetch it on demand:
-
-```bash
-curl -fsSL "https://raw.githubusercontent.com/mlcommons/croissant/f751227d78f2ae1cee3802a0db7e2cdc36e6da32/tasks/benchmark_examples/mmlu/mmlu_problem.jsonld"
-```
+Check the `tasks/benchmark_examples/` directory in the repository for examples of Croissant Tasks files (such as MMLU). These examples show how to structure `TaskProblem` and `TaskSolution` files for different types of benchmarks, including usage of subtasks and deduplication. You can fetch them on demand from the repository.
 
 ---
 
@@ -355,69 +361,16 @@ Skip this step if the paper reports no baselines.
 
 ## Step 6: Evaluate Outputs (programmatic)
 
-Write a validation driver as `{{results_dir}}/_validate.py` and run it over every JSON-LD file:
+Use the Python validator available in the latest commit of PR #1017 (e.g., `validator.py`) to check constraints in the files generated. This validator is the official way to verify that your generated JSON-LD files conform to the Croissant Tasks specification and shapes.
 
-```python
-#!/usr/bin/env python3
-"""Validate every .jsonld under the results dir using Croissant Tasks SHACL shapes."""
-import glob, json, pathlib, sys
-import pyshacl, rdflib
-
-RESULTS = pathlib.Path("{{results_dir}}")
-SHAPES  = RESULTS / "croissant-tasks-shapes.ttl"
-ONT     = RESULTS / "croissant-tasks.ttl"
-
-def validate(path: pathlib.Path):
-    data = rdflib.Graph()
-    data.parse(path, format="json-ld")
-
-    shapes = rdflib.Graph().parse(SHAPES, format="turtle")
-    ont    = rdflib.Graph().parse(ONT,    format="turtle")
-
-    conforms, _, report = pyshacl.validate(
-        data,
-        shacl_graph=shapes,
-        ont_graph=ont,
-        inference="rdfs",
-        serialize_report_graph=True,
-    )
-    return conforms, report
-
-def main():
-    files = [RESULTS / "problem.jsonld"] + sorted((RESULTS / "solutions").glob("*.jsonld"))
-    stage_results = []
-    for f in files:
-        if not f.exists():
-            stage_results.append({"file": str(f), "json_valid": False,
-                                  "shacl_conforms": False, "error": "missing"})
-            continue
-        try:
-            json.loads(f.read_text())
-            json_ok = True
-        except Exception as e:
-            stage_results.append({"file": str(f), "json_valid": False,
-                                  "shacl_conforms": False, "error": str(e)})
-            continue
-        conforms, report = validate(f)
-        stage_results.append({
-            "file": str(f),
-            "json_valid": json_ok,
-            "shacl_conforms": bool(conforms),
-            "report": None if conforms else report.decode() if isinstance(report, bytes) else str(report),
-        })
-    print(json.dumps(stage_results, indent=2))
-    sys.exit(0 if all(s["json_valid"] and s["shacl_conforms"] for s in stage_results) else 1)
-
-if __name__ == "__main__":
-    main()
-```
-
-Run it:
-
+Run the validator on each generated file:
 ```bash
-python3 {{results_dir}}/_validate.py > {{results_dir}}/_validation.json || true
-cat {{results_dir}}/_validation.json
+# Example usage (adjust path to validator.py as needed)
+python3 path/to/validator.py {{results_dir}}/problem.jsonld
+python3 path/to/validator.py {{results_dir}}/solutions/<slug>.jsonld
 ```
+
+Capture the output of the validator to identify any non-conformance issues.
 
 Per-file status mapping:
 
@@ -469,7 +422,7 @@ Write `{{results_dir}}/summary.md`:
 ## Overview
 - **Date**: <run date>
 - **Paper**: <title, authors>
-- **PDF**: {{pdf_filename}}
+- **PDF**: {{pdf_location}}
 - **Paper URL**: {{paper_url}}
 - **Dataset URL**: {{dataset_url}}
 - **@id base**: <what you chose>
@@ -531,7 +484,7 @@ Write `{{results_dir}}/validation_report.json`:
   "version": "1.0.0",
   "run_date": "<ISO8601>",
   "parameters": {
-    "pdf_filename":  "{{pdf_filename}}",
+    "pdf_location":  "{{pdf_location}}",
     "paper_url":     "{{paper_url}}",
     "dataset_url":   "{{dataset_url}}"
   },
@@ -596,10 +549,15 @@ python3 -c "import json; d=json.load(open('$R/validation_report.json')); assert 
   && echo "PASS: validation_report.json has overall_passed" \
   || echo "FAIL: validation_report.json malformed"
 
-# SHACL re-check
-python3 "$R/_validate.py" \
-  && echo "PASS: all files conform to Croissant Tasks SHACL" \
-  || echo "FAIL: SHACL non-conformance remains"
+# SHACL re-check using official validator
+echo "INFO: Running official validator..."
+for f in "$R/problem.jsonld" $(find "$R/solutions" -name "*.jsonld" 2>/dev/null); do
+  if [ -f "$f" ]; then
+    python3 path/to/validator.py "$f" \
+      && echo "PASS: $f conforms" \
+      || echo "FAIL: $f does not conform"
+  fi
+done
 ```
 
 ### Checklist
