@@ -99,10 +99,10 @@ croissant:value a rdf:Property ;
   schema:domainIncludes croissant:EvaluationResult ;
   schema:rangeIncludes schema:QuantitativeValue, schema:Text, schema:Number .
 
-# Reusing schema:isBasedOn to link a TaskSolution to the TaskProblem it solves.
-schema:isBasedOn schema:domainIncludes croissant:TaskSolution ;
+# Reusing schema:isBasedOn to link a TaskSolution or EvaluationTask to the TaskProblem it addresses.
+schema:isBasedOn schema:domainIncludes croissant:TaskSolution, croissant:EvaluationTask ;
   schema:rangeIncludes schema:URL, croissant:TaskProblem ;
-  rdfs:comment "Required. A reference to the @id of the cr:TaskProblem that this solution addresses. This creates the formal link between the problem and the solution." .
+  rdfs:comment "A reference to the @id of the cr:TaskProblem that this solution or evaluation addresses." .
 
 # Spec Classes
 
@@ -186,4 +186,12 @@ croissant:hyperparameter a rdf:Property ;
   rdfs:comment "A hyperparameter used in the execution configuration." ;
   schema:domainIncludes croissant:ExecutionConfig ;
   schema:rangeIncludes schema:PropertyValue .
+
+# External properties reused or formalized here
+
+schema:valuePattern a rdf:Property ;
+  rdfs:label "valuePattern" ;
+  rdfs:comment "A regular expression pattern to validate field values." ;
+  schema:domainIncludes croissant:Field ;
+  schema:rangeIncludes schema:Text .
 

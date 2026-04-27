@@ -244,3 +244,37 @@ To capture hyperparameters and other configuration for execution in a `TaskSolut
 }
 ```
 
+## Reproducibility Framework
+
+This library includes a general framework to automate the execution of benchmark evaluations defined by Croissant Task files.
+
+### Design
+
+The framework is designed using standard software patterns to ensure flexibility and extensibility:
+*   **Strategy Pattern (`Evaluator`)**: Decouples the execution of tasks and computation of metrics from the core library. Users can implement their own evaluators for specific models or datasets by extending the `Evaluator` abstract class.
+*   **Factory Pattern (`EvaluatorFactory`)**: Responsible for creating specific `Evaluator` instances based on the task description found in the solution files.
+*   **Template Method Pattern (`TaskRunner`)**: Defines the high-level loop for loading files, iterating over subtasks, calling the appropriate evaluator, gathering environment information, and delegating results registration to the `ResultManager`.
+
+### Usage via CLI
+
+You can run evaluations at the push of a button without writing any code by using the CLI tool provided in this library.
+
+To run an evaluation, execute `croissant_cli.py` with arguments pointing to your `TaskProblem` and `TaskSolution` files, the desired output path, and the fully qualified path to the specific factory class.
+
+```bash
+python croissant_cli.py \
+  --problem path/to/problem.jsonld \
+  --solution path/to/solution.jsonld \
+  --output path/to/results.json \
+  --factory path.to.module.ClassName
+```
+
+For the provided XL-Sum showcase example, assuming proper setup, the execution looks as follows:
+
+```bash
+python experimental/users/leobianco/croissant_tasks/croissant_cli.py \
+  --problem experimental/users/leobianco/croissant_tasks/benchmark_examples/xlsum/xlsum_problem.jsonld \
+  --solution experimental/users/leobianco/croissant_tasks/benchmark_examples/xlsum/xlsum_geminipro_solution.jsonld \
+  --output experimental/users/leobianco/croissant_tasks/benchmark_examples/xlsum/results.json \
+  --factory google3.experimental.users.leobianco.croissant_tasks.benchmark_examples.xlsum.xlsum_evaluator_factory.XlSumEvaluatorFactory
+```

@@ -1,9 +1,8 @@
-import os
-import sys
 import unittest
 
-sys.path.append(os.path.dirname(__file__))
-from validator import validate_data
+import validator
+
+validate_data = validator.validate_data
 
 
 class TestCroissantTasksValidator(unittest.TestCase):
@@ -104,7 +103,7 @@ class TestCroissantTasksValidator(unittest.TestCase):
     self.assertTrue(conforms, "MMLU problem should pass validation.")
 
   def test_mmlu_solutions(self):
-    conforms, _ = validate_data("benchmark_examples/mmlu/mmlu_solutions.jsonld")
+    conforms, _ = validate_data("benchmark_examples/mmlu/mmlu_solution_large_fewshot.jsonld")
     self.assertTrue(conforms, "MMLU solutions should pass validation.")
 
 

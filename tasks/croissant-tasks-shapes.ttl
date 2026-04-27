@@ -261,6 +261,18 @@ croissant:EvaluationResultShape
   ] .
 
 # -----------------------------------------------------------------------------
+# Execution Config Shape
+# -----------------------------------------------------------------------------
+croissant:ExecutionConfigShape
+  a sh:NodeShape ;
+  sh:targetClass croissant:ExecutionConfig ;
+  sh:property [
+    sh:path croissant:hyperparameter ;
+    sh:class schema:PropertyValue ;
+    sh:message "croissant:hyperparameter must point to a PropertyValue."
+  ] .
+
+# -----------------------------------------------------------------------------
 # EvaluationTask Shape
 # -----------------------------------------------------------------------------
 croissant:EvaluationTaskShape
@@ -274,9 +286,16 @@ croissant:EvaluationTaskShape
   sh:property [
     sh:path croissant:evaluatedSolution ;
     sh:class croissant:TaskSolution ;
-    sh:minCount 1 ;
-    sh:maxCount 1 ;
+    sh:qualifiedMinCount 1 ;
     sh:message "croissant:evaluatedSolution must point to exactly one TaskSolution."
+  ] ;
+  sh:property [
+    sh:path schema:isBasedOn ;
+    sh:or (
+      [ sh:class croissant:TaskProblem ]
+      [ sh:nodeKind sh:IRI ]
+    ) ;
+    sh:message "croissant:isBasedOn must point to a TaskProblem or URL."
   ] .
 
 # -----------------------------------------------------------------------------
@@ -300,5 +319,10 @@ croissant:FieldShape
     sh:nodeKind sh:IRI ;
     sh:minCount 1 ;
     sh:message "A Field must have a dataType."
+  ] ;
+  sh:property [
+    sh:path schema:valuePattern ;
+    sh:datatype xsd:string ;
+    sh:message "schema:valuePattern must be a string."
   ] .
 
