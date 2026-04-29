@@ -276,7 +276,7 @@ For each sub-category:
 }
 ```
 
-**Deduplication trick** (from the MMLU example): define `OutputSpec` / `EvaluationSpec` once at the parent with a concrete `@id`, then reference by `{ "@id": "<same_id>" }` in every subtask. Do NOT repeat the inner body.
+**Deduplication and Referencing**: If a `subTask` uses the same field (like `input`, `output`, or `evaluation`) that already appears in the parent task or another subtask, you must still include that field in the subtask. However, instead of repeating the full object, use the `@id` property to point to the existing definition. For example: `"croissant:input": { "@id": "parent_input_id" }`. This ensures constraints are correctly checked while avoiding duplication.
 
 ### Reference Examples
 
