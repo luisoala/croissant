@@ -1,0 +1,96 @@
+{
+  "version": "1.0.0",
+  "run_date": "2026-04-29",
+  "skill": "pdf2ct",
+  "parameters": {
+    "pdf_location": "https://openreview.net/pdf?id=pmLMrqhIpb",
+    "paper_url": "https://arxiv.org/abs/2506.11440",
+    "dataset_url": "https://huggingface.co/datasets/harveyfin/AbsenceBench"
+  },
+  "stages": [
+    {
+      "name": "setup",
+      "passed": true,
+      "message": "pyshacl 0.31.0, rdflib, datasets, anthropic installed in tasks/.venv-tasks (Python 3.12). Local copies of croissant-tasks-shapes.ttl and croissant-tasks.ttl used for validation."
+    },
+    {
+      "name": "paper_analysis",
+      "passed": true,
+      "message": "Paper read in full. Task definition, three domains (poetry, numerical, github_prs), micro-F1 + element-level exact match metric, and Table 3 baselines extracted. Two of 16 reported baselines materialized as TaskSolutions (claude-3-7-sonnet ±thinking)."
+    },
+    {
+      "name": "problem_generated",
+      "passed": true,
+      "message": "absencebench_problem.jsonld written with three subTasks, shared OutputSpec referencing a RecordSet with a single repeated string Field, and EvaluationSpec declaring F1-Score and Exact Match."
+    },
+    {
+      "name": "solutions_generated",
+      "passed": true,
+      "message": "Two paper-reported TaskSolution files written (claude-3-7-sonnet, claude-3-7-sonnet-thinking). One ct2code-produced TaskSolution also lives in this directory (absencebench_claude-4-sonnet_solution.jsonld) - that one is documented in raw_outputs/<model>/manifest_*.json and is not part of this pdf2ct validation report."
+    },
+    {
+      "name": "json_validity",
+      "passed": true,
+      "message": "All four JSON-LD files parse as JSON and as RDF graphs (rdflib json-ld parser)."
+    },
+    {
+      "name": "shacl_conformance",
+      "passed": false,
+      "skipped": true,
+      "message": "SHACL validation could not be performed. tasks/validator.py raises 'exists but is not a well-formed SHACL PropertyShape' on every input including tasks/testdata/valid_problem.jsonld. Root cause: TaskProblemShape in tasks/croissant-tasks-shapes.ttl uses an outer sh:property whose body is sh:or of alternatives, with no sh:path on the outer property shape. Strict pyshacl 0.22 onwards refuses this. Reproduced across pyshacl 0.22-0.31. Until the shapes are fixed, this run uses _structural_check.py (rdflib-only) as a substitute - see structural_check_results below."
+    },
+    {
+      "name": "report_generation",
+      "passed": true,
+      "message": "summary.md and validation_report.json written."
+    }
+  ],
+  "per_file": [
+    {
+      "file": "absencebench_problem.jsonld",
+      "json_valid": true,
+      "rdf_parsable": true,
+      "shacl_conforms": null,
+      "shacl_status": "SKIPPED (upstream validator broken)",
+      "structural_check": "PASS",
+      "iterations": 1
+    },
+    {
+      "file": "absencebench_solution_claude-3-7-sonnet.jsonld",
+      "json_valid": true,
+      "rdf_parsable": true,
+      "shacl_conforms": null,
+      "shacl_status": "SKIPPED (upstream validator broken)",
+      "structural_check": "PASS",
+      "iterations": 1
+    },
+    {
+      "file": "absencebench_solution_claude-3-7-sonnet-thinking.jsonld",
+      "json_valid": true,
+      "rdf_parsable": true,
+      "shacl_conforms": null,
+      "shacl_status": "SKIPPED (upstream validator broken)",
+      "structural_check": "PASS",
+      "iterations": 1
+    }
+  ],
+  "results": {"pass": 3, "fail": 0, "skipped_shacl": 3},
+  "overall_passed": true,
+  "iterations": 1,
+  "output_files": [
+    "tasks/benchmark_examples/absencebench/absencebench_problem.jsonld",
+    "tasks/benchmark_examples/absencebench/absencebench_solution_claude-3-7-sonnet.jsonld",
+    "tasks/benchmark_examples/absencebench/absencebench_solution_claude-3-7-sonnet-thinking.jsonld",
+    "tasks/benchmark_examples/absencebench/summary.md",
+    "tasks/benchmark_examples/absencebench/validation_report.json"
+  ],
+  "upstream_issues": [
+    {
+      "id": "shacl-validator-broken",
+      "where": "tasks/validator.py + tasks/croissant-tasks-shapes.ttl",
+      "summary": "Validator rejects every input due to a malformed PropertyShape in TaskProblemShape (sh:property with sh:or of alternative paths but no outer sh:path).",
+      "suggested_fix": "Lift the sh:or out of the inner sh:property and apply it as sh:or at the NodeShape level, with each alternative being a full sh:property with its own sh:path and sh:class. Reproduces on pyshacl 0.22-0.31.",
+      "workaround": "tasks/benchmark_examples/absencebench/_structural_check.py validates JSON parse + RDF parse + expected types/properties + spec leakage rules using rdflib only. Drop when shapes file is fixed."
+    }
+  ]
+}
