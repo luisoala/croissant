@@ -1,4 +1,4 @@
-# AbsenceBench run: `02b87497_2026-04-29T14-58Z_dryrun_n5`
+# AbsenceBench run: `02b87497_2026-04-29T14-58Z`
 
 Self-contained snapshot of one end-to-end `pdf2ct → ct2code` execution against AbsenceBench (Fu et al. 2025, [arXiv:2506.11440](https://arxiv.org/abs/2506.11440)).
 
@@ -6,7 +6,8 @@ Self-contained snapshot of one end-to-end `pdf2ct → ct2code` execution against
 
 - **Parent commit**: `02b87497` (Leo: "add - ct2code skill + updated pdf2ct skill").
 - **Started**: 2026-04-29 14:58 UTC.
-- **Flavor**: `dryrun_n5` — first 5 instances of the validation split per subtask, 15 LLM calls total. This is a pipeline sanity check, not a benchmark result.
+- **Run kind**: dry-run, first 5 instances of the validation split per subtask = 15 LLM calls total. This is a pipeline sanity check, not a benchmark result.
+- **Baseline**: `claude-4-sonnet` invoked via 15 Cursor subagents (one per instance), `temperature=0`, `max_tokens=4096`, paper Appendix A default prompt templates.
 - **pdf2ct stage**: complete. Authored TaskProblem, two paper-reported TaskSolutions (claude-3-7-sonnet ±thinking), `summary.md`, `validation_report.json`. SHACL conformance was SKIPPED because the upstream validator currently rejects every input (see "Validator status" below); structural-check via `infra/_structural_check.py` PASSED on all four files.
 - **ct2code stage**: complete. Generated `absencebench_implementation.py`, ran it against `claude-4-sonnet` via 15 Cursor subagents (one per instance), wrote per-instance predictions to `ct2code/raw_outputs/claude-4-sonnet/outputs_<domain>.jsonl`, populated `absencebench_claude-4-sonnet_solution.jsonld`.
 - **Headline numbers** (5 instances per subtask, micro-F1 / per-instance exact-match rate):
@@ -23,7 +24,7 @@ Self-contained snapshot of one end-to-end `pdf2ct → ct2code` execution against
 ## Layout under this directory
 
 ```
-02b87497_2026-04-29T14-58Z_dryrun_n5/
+02b87497_2026-04-29T14-58Z/
 ├── README.md                                                    ← you are here
 │
 ├── pdf2ct/                                                       ← outputs of SKILL_pdf2ct
@@ -61,9 +62,9 @@ pip install anthropic                                              # solution-sp
 export ANTHROPIC_API_KEY=...
 
 # Snapshot a new run dir based on this one's structure:
-NEW_RUN="$(git rev-parse --short HEAD)_$(date -u +%Y-%m-%dT%H-%MZ)_dryrun_n5"
+NEW_RUN="$(git rev-parse --short HEAD)_$(date -u +%Y-%m-%dT%H-%MZ)"
 NEW_DIR="tasks/benchmark_examples/absencebench/runs/$NEW_RUN"
-cp -r tasks/benchmark_examples/absencebench/runs/02b87497_2026-04-29T14-58Z_dryrun_n5 "$NEW_DIR"
+cp -r tasks/benchmark_examples/absencebench/runs/02b87497_2026-04-29T14-58Z "$NEW_DIR"
 rm -rf "$NEW_DIR/ct2code/raw_outputs/claude-4-sonnet" "$NEW_DIR/ct2code/prompts"
 sed -i 's/PENDING/PENDING/g' "$NEW_DIR/ct2code/absencebench_claude-4-sonnet_solution.jsonld"  # reset the populated solution to placeholders if desired
 

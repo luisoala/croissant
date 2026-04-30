@@ -1,12 +1,13 @@
 {
   "version": "1.0.0",
   "skill": "ct2code",
-  "run_id": "02b87497_2026-04-29T14-58Z_dryrun_n5",
+  "run_id": "02b87497_2026-04-29T14-58Z",
   "run_id_breakdown": {
     "parent_commit": "02b87497 (Leo: 'add - ct2code skill + updated pdf2ct skill')",
-    "started_utc": "2026-04-29T14:58Z",
-    "flavor": "dryrun_n5"
+    "started_utc": "2026-04-29T14:58Z"
   },
+  "run_kind": "dryrun",
+  "run_kind_note": "First 5 instances of the validation split per subtask (15 LLM calls total). Pipeline sanity check, not a benchmark result. The `instances_per_subset` hyperparameter (5) and the per-instance `metrics_summary.<domain>.n` (5) make the dry-run nature explicit at the data level.",
   "paths_relative_to_this_file": {
     "task_problem": "../../../pdf2ct/absencebench_problem.jsonld",
     "task_solution": "../../absencebench_claude-4-sonnet_solution.jsonld",
