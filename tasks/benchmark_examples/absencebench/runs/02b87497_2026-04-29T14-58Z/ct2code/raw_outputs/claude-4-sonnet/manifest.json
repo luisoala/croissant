@@ -42,7 +42,7 @@
   },
   "validation": {
     "shacl_validator": "SKIPPED",
-    "shacl_validator_note": "tasks/validator.py + tasks/croissant-tasks-shapes.ttl rejects every input across pyshacl 0.22-0.31 due to malformed PropertyShape; see pdf2ct/validation_report.json for details.",
+    "shacl_validator_note": "Two known shape bugs in tasks/croissant-tasks-shapes.ttl block the paths our files exercise. Bug A (TaskProblemShape spec constraint, malformed outer PropertyShape) hits TaskProblems; Bug B (EvaluationTaskShape evaluatedSolution qualified-cardinality) hits TaskSolutions with EvaluationTask children. Both match items on the team's known-issue list (RISEBench agent analysis, Slack 2026-04-29: 'Change 2' and 'Change 4'). Spec files were NOT modified in this run, per team guidance. See pdf2ct/validation_report.json for structured detail and suggested fixes.",
     "structural_check": "PASS",
     "structural_check_tool": "../../../infra/_structural_check.py"
   },

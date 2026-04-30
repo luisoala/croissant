@@ -65,7 +65,14 @@ See `validation_report.json` for the structured form. Summary:
 | `absencebench_solution_claude-3-7-sonnet-thinking.jsonld` | PASS | PASS | SKIPPED | PASS |
 | `absencebench_claude-4-sonnet_solution.jsonld` (ct2code) | PASS | PASS | SKIPPED | PASS |
 
-The SHACL validator is broken upstream — `tasks/validator.py` rejects every input across pyshacl 0.22-0.31, including `tasks/testdata/valid_problem.jsonld`, due to a malformed `PropertyShape` in `croissant-tasks-shapes.ttl` (the "must have at least one Spec" property uses `sh:property` with `sh:or` of alternative paths but no outer `sh:path`). See `validation_report.json` for the exact error and the rationale for the structural-check workaround in `_structural_check.py`.
+SHACL validation against `tasks/croissant-tasks-shapes.ttl` is blocked by two distinct shape bugs that affect our four files:
+
+- **Bug A**: `TaskProblemShape`'s "must have at least one Spec" constraint uses `sh:property` with `sh:or` of alternative `sh:path`s but no outer `sh:path`. Pyshacl 0.22-0.31 rejects with `'exists but is not a well-formed SHACL PropertyShape'`. Hits our `absencebench_problem.jsonld` (and Leo's own `tasks/testdata/valid_problem.jsonld`).
+- **Bug B**: `EvaluationTaskShape`'s `croissant:evaluatedSolution` uses `sh:qualifiedMinCount 1` without a corresponding `sh:qualifiedValueShape`. Pyshacl rejects with `'QualifiedValueShapeConstraintComponent must have at least one sh:qualifiedValueShape predicate'`. Hits all three of our TaskSolution files (which carry `EvaluationTask` blocks).
+
+Both bugs match items on the team's known-issue list as identified by the agent in the RISEBench experiment (Slack thread on 2026-04-29): Bug A = "Change 2: Fix TaskProblemShape spec constraint", Bug B = "Change 4: Fix evaluatedSolution cardinality". Validator state on simpler inputs is now healthy — `tasks/testdata/valid_solution.jsonld` and `tasks/testdata/direct_task.jsonld` PASS — so Leo's recent shape fixes did land, just not on the two shapes our files exercise.
+
+Per the team guidance in that same Slack thread (Omar: *"we should not allow them to do that"*; Leo: *"ignore the croissant-tasks-shapes.ttl. The shapes are only important for the validator."*), **this run deliberately does NOT modify `tasks/croissant-tasks.ttl` or `tasks/croissant-tasks-shapes.ttl`.** The two bugs above are documented and worked around (via `infra/_structural_check.py`), not patched. See `validation_report.json` for the structured form, including suggested fixes for both bugs.
 
 ## Limitations / caveats
 

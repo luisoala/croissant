@@ -8,7 +8,8 @@ Self-contained snapshot of one end-to-end `pdf2ct → ct2code` execution against
 - **Started**: 2026-04-29 14:58 UTC.
 - **Run kind**: dry-run, first 5 instances of the validation split per subtask = 15 LLM calls total. This is a pipeline sanity check, not a benchmark result.
 - **Baseline**: `claude-4-sonnet` invoked via 15 Cursor subagents (one per instance), `temperature=0`, `max_tokens=4096`, paper Appendix A default prompt templates.
-- **pdf2ct stage**: complete. Authored TaskProblem, two paper-reported TaskSolutions (claude-3-7-sonnet ±thinking), `summary.md`, `validation_report.json`. SHACL conformance was SKIPPED because the upstream validator currently rejects every input (see "Validator status" below); structural-check via `infra/_structural_check.py` PASSED on all four files.
+- **pdf2ct stage**: complete. Authored TaskProblem, two paper-reported TaskSolutions (claude-3-7-sonnet ±thinking), `summary.md`, `validation_report.json`. SHACL conformance was SKIPPED because two known shape bugs in `tasks/croissant-tasks-shapes.ttl` block the paths our files exercise (Bug A on TaskProblems, Bug B on TaskSolutions-with-EvaluationTasks; see "Validator status" below). Structural-check via `infra/_structural_check.py` PASSED on all four files.
+- **Spec modifications**: NONE. Per team guidance in the 2026-04-29 Slack thread, this run deliberately does NOT modify `tasks/croissant-tasks.ttl` or `tasks/croissant-tasks-shapes.ttl`.
 - **ct2code stage**: complete. Generated `absencebench_implementation.py`, ran it against `claude-4-sonnet` via 15 Cursor subagents (one per instance), wrote per-instance predictions to `ct2code/raw_outputs/claude-4-sonnet/outputs_<domain>.jsonl`, populated `absencebench_claude-4-sonnet_solution.jsonld`.
 - **Headline numbers** (5 instances per subtask, micro-F1 / per-instance exact-match rate):
 
@@ -100,13 +101,21 @@ Anyone can re-derive the F1 / EM values stored in `absencebench_claude-4-sonnet_
 
 ## Validator status
 
-The upstream SHACL validator at `tasks/validator.py` is broken: pyshacl 0.22-0.31 all reject every input (including Leo's own `tasks/testdata/valid_problem.jsonld`) due to a malformed `PropertyShape` in `tasks/croissant-tasks-shapes.ttl` — the property used for `TaskProblemShape`'s "must have at least one Spec" constraint is an outer `sh:property` whose body is `sh:or` of alternatives, with no outer `sh:path`. Strict pyshacl raises:
+SHACL validation against the current upstream (`02b87497`) is blocked on the paths our files exercise by **two distinct shape bugs in `tasks/croissant-tasks-shapes.ttl`**. Both match items on the team's known-issue list, as surfaced by the agent in the RISEBench experiment (Slack thread on 2026-04-29).
 
-```
-'<NodeShape n...>' exists but is not a well-formed SHACL PropertyShape.
-```
+| Bug | Where | pyshacl error | Affects | Matches RISEBench analysis |
+|---|---|---|---|---|
+| **A** | `TaskProblemShape` "must have at least one Spec" — outer `sh:property` whose body is `sh:or` of alternatives has no outer `sh:path` | `'exists but is not a well-formed SHACL PropertyShape'` | All TaskProblems, including our `pdf2ct/absencebench_problem.jsonld` and Leo's own `tasks/testdata/valid_problem.jsonld` | "Change 2: Fix TaskProblemShape spec constraint" |
+| **B** | `EvaluationTaskShape` `croissant:evaluatedSolution` — `sh:qualifiedMinCount 1` without corresponding `sh:qualifiedValueShape` | `'QualifiedValueShapeConstraintComponent must have at least one sh:qualifiedValueShape predicate'` | All TaskSolutions in this run (each carries `EvaluationTask` children) | "Change 4: Fix evaluatedSolution cardinality" |
 
-While that's open, this run uses `infra/_structural_check.py` (rdflib-only) to verify each JSON-LD parses, has the expected types, includes required references, no Specs leak into Solutions, etc. All four JSON-LD files in this run pass. See `pdf2ct/validation_report.json` for the structured per-file status, including a note on the suggested upstream fix.
+Suggested fixes (also recorded in `pdf2ct/validation_report.json` `upstream_issues`):
+
+- **Bug A**: lift the `sh:or` out of the inner `sh:property` to NodeShape level, with each alternative being a full `sh:property` carrying its own `sh:path`, `sh:class`, and `sh:minCount 1`.
+- **Bug B**: replace `sh:qualifiedMinCount 1` with `sh:minCount 1` + `sh:maxCount 1` (the cardinality the constraint actually wants is "exactly 1", not a qualified-shape count).
+
+Validator state on simpler inputs is healthier than yesterday: `tasks/testdata/valid_solution.jsonld` and `tasks/testdata/direct_task.jsonld` now PASS. So Leo's recent shape updates did land — just not on the two shapes our files exercise.
+
+**This run deliberately does NOT modify the spec files** (`tasks/croissant-tasks.ttl` or `tasks/croissant-tasks-shapes.ttl`), per the team guidance in the 2026-04-29 Slack thread. Workaround: `infra/_structural_check.py` (rdflib-only) verifies each JSON-LD parses, has the expected types, includes required references, and that no Specs leak into Solutions. All four JSON-LD files pass it.
 
 ## Out of scope for this run / known caveats
 
