@@ -78,11 +78,11 @@
   "overall_passed": true,
   "iterations": 1,
   "output_files": [
-    "tasks/benchmark_examples/absencebench/absencebench_problem.jsonld",
-    "tasks/benchmark_examples/absencebench/absencebench_solution_claude-3-7-sonnet.jsonld",
-    "tasks/benchmark_examples/absencebench/absencebench_solution_claude-3-7-sonnet-thinking.jsonld",
-    "tasks/benchmark_examples/absencebench/summary.md",
-    "tasks/benchmark_examples/absencebench/validation_report.json"
+    "tasks/benchmark_examples/absencebench/runs/02b87497_2026-04-29T14-58Z_dryrun_n5/pdf2ct/absencebench_problem.jsonld",
+    "tasks/benchmark_examples/absencebench/runs/02b87497_2026-04-29T14-58Z_dryrun_n5/pdf2ct/absencebench_solution_claude-3-7-sonnet.jsonld",
+    "tasks/benchmark_examples/absencebench/runs/02b87497_2026-04-29T14-58Z_dryrun_n5/pdf2ct/absencebench_solution_claude-3-7-sonnet-thinking.jsonld",
+    "tasks/benchmark_examples/absencebench/runs/02b87497_2026-04-29T14-58Z_dryrun_n5/pdf2ct/summary.md",
+    "tasks/benchmark_examples/absencebench/runs/02b87497_2026-04-29T14-58Z_dryrun_n5/pdf2ct/validation_report.json"
   ],
   "upstream_issues": [
     {
@@ -90,7 +90,7 @@
       "where": "tasks/validator.py + tasks/croissant-tasks-shapes.ttl",
       "summary": "Validator rejects every input due to a malformed PropertyShape in TaskProblemShape (sh:property with sh:or of alternative paths but no outer sh:path).",
       "suggested_fix": "Lift the sh:or out of the inner sh:property and apply it as sh:or at the NodeShape level, with each alternative being a full sh:property with its own sh:path and sh:class. Reproduces on pyshacl 0.22-0.31.",
-      "workaround": "tasks/benchmark_examples/absencebench/_structural_check.py validates JSON parse + RDF parse + expected types/properties + spec leakage rules using rdflib only. Drop when shapes file is fixed."
+      "workaround": "tasks/benchmark_examples/absencebench/runs/<run_id>/infra/_structural_check.py validates JSON parse + RDF parse + expected types/properties + spec leakage rules using rdflib only. Drop when shapes file is fixed."
     }
   ]
 }

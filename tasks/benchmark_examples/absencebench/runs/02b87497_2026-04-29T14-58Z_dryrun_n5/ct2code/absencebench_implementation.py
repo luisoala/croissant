@@ -55,7 +55,6 @@ from typing import Any
 from datasets import load_dataset
 
 HERE = Path(__file__).resolve().parent
-PROBLEM_FILE = HERE / "absencebench_problem.jsonld"
 
 DEFAULT_MODEL = "claude-sonnet-4-5"
 DEFAULT_MAX_TOKENS = 4096

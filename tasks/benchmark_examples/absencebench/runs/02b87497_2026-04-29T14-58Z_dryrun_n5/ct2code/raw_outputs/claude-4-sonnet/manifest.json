@@ -1,14 +1,24 @@
 {
   "version": "1.0.0",
   "skill": "ct2code",
-  "run_id": "2026-04-29T14-58Z_dryrun_n5_cursor-subagent",
-  "task_problem": "../../absencebench_problem.jsonld",
-  "task_solution": "../../absencebench_claude-4-sonnet_solution.jsonld",
-  "implementation": "../../absencebench_implementation.py",
+  "run_id": "02b87497_2026-04-29T14-58Z_dryrun_n5",
+  "run_id_breakdown": {
+    "parent_commit": "02b87497 (Leo: 'add - ct2code skill + updated pdf2ct skill')",
+    "started_utc": "2026-04-29T14:58Z",
+    "flavor": "dryrun_n5"
+  },
+  "paths_relative_to_this_file": {
+    "task_problem": "../../../pdf2ct/absencebench_problem.jsonld",
+    "task_solution": "../../absencebench_claude-4-sonnet_solution.jsonld",
+    "implementation": "../../absencebench_implementation.py",
+    "prompts_dir": "../../prompts/",
+    "structural_check_tool": "../../../infra/_structural_check.py",
+    "validation_report": "../../../pdf2ct/validation_report.json"
+  },
   "model": "claude-4-sonnet",
   "model_note": "Cursor-subagent invocation; model slug is the one accepted by the Task tool. Closest direct mapping is Anthropic claude-sonnet-4 (i.e., the Sonnet 4 family).",
   "runner_type": "cursor-subagent",
-  "runner_note": "15 Cursor subagents (subagent_type=generalPurpose, model=claude-4-sonnet, one per instance) launched in two parallel batches - 5 numerical, then 10 (5 github_prs + 5 poetry). Each subagent was given the path to a per-instance prompt file under _prompts/ containing the paper Appendix A default template (system + user) wrapped in a roleplay preamble, and instructed to write its literal model output to _responses/<domain>_<id>.txt. Subagent IDs were session-scoped; not archived.",
+  "runner_note": "15 Cursor subagents (subagent_type=generalPurpose, model=claude-4-sonnet, one per instance) launched in two parallel batches - 5 numerical, then 10 (5 github_prs + 5 poetry). Each subagent was given the path to a per-instance prompt file (committed under prompts/) containing the paper Appendix A default template (system + user) wrapped in a roleplay preamble, and instructed to write its literal model output back. Subagent IDs were session-scoped and are not archived; the response text is preserved as the raw_response field in each outputs_<domain>.jsonl record.",
   "hyperparameters": {
     "temperature": 0.0,
     "max_tokens": 4096,
@@ -31,9 +41,9 @@
   },
   "validation": {
     "shacl_validator": "SKIPPED",
-    "shacl_validator_note": "tasks/validator.py + tasks/croissant-tasks-shapes.ttl rejects every input across pyshacl 0.22-0.31 due to malformed PropertyShape; see ../../validation_report.json for details.",
+    "shacl_validator_note": "tasks/validator.py + tasks/croissant-tasks-shapes.ttl rejects every input across pyshacl 0.22-0.31 due to malformed PropertyShape; see pdf2ct/validation_report.json for details.",
     "structural_check": "PASS",
-    "structural_check_tool": "../../_structural_check.py"
+    "structural_check_tool": "../../../infra/_structural_check.py"
   },
   "metrics_summary": {
     "poetry":     {"f1": 85.35, "exact_match_rate": 20.00, "n": 5},
@@ -47,11 +57,11 @@
     "claude-3-7-sonnet (paper, thinking)":    {"poetry": 72.7, "numerical": 96.0, "github_prs": 40.0, "overall": 69.6},
     "this run (claude-4-sonnet, n=5/subset)": {"poetry": 85.35, "numerical": 100.00, "github_prs": 9.77, "overall": 65.98}
   },
-  "command_line": "cursor: 15 Task() invocations of subagent_type=generalPurpose with model=claude-4-sonnet (see runner_note); subsequently `python _dryrun_ingest.py --model claude-4-sonnet`. Equivalent direct-API command: `python absencebench_implementation.py --dry-run --model claude-sonnet-4-5`.",
+  "command_line": "cursor: 15 Task() invocations of subagent_type=generalPurpose with model=claude-4-sonnet (see runner_note). Equivalent direct-API command for a fresh run on a different machine: `python absencebench_implementation.py --dry-run --model claude-sonnet-4-5` (requires ANTHROPIC_API_KEY).",
   "agent_transcript": {
     "path": "/home/luis/.cursor/projects/<session-uuid>/agent-transcripts/<conversation-uuid>.jsonl",
     "committed": false,
-    "note": "Lives on the contributor's machine; session-scoped Cursor metadata; not portable. Referenced for audit but not part of this commit. The implementation script + this manifest + the per-instance outputs_*.jsonl are sufficient for full reproducibility."
+    "note": "Lives on the contributor's machine; session-scoped Cursor metadata; not portable. Referenced for audit but not part of this commit. The implementation script + this manifest + the per-instance outputs_*.jsonl + committed prompts/ dir are sufficient for full reproducibility."
   },
   "output_files": [
     "outputs_poetry.jsonl",
