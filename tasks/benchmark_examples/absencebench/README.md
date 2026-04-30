@@ -28,15 +28,18 @@ The kind of run (dry-run vs full eval, N-per-subset, model, runner type) is docu
 
 ## Runs in this directory
 
-| Run | Started | Parent commit | Stage status | Headline |
-|---|---|---|---|---|
-| [`02b87497_2026-04-29T14-58Z`](runs/02b87497_2026-04-29T14-58Z/) | 2026-04-29 | `02b87497` (Leo: ct2code skill + updated pdf2ct skill) | pdf2ct: complete; ct2code: 5-instance/subset dry-run on `claude-4-sonnet` via Cursor subagent | overall micro-F1 65.98 |
+| Run | Started | Parent commit | Stage status | Headline overall F1 |
+|---|---|---|---|---:|
+| [`02b87497_2026-04-29T14-58Z`](runs/02b87497_2026-04-29T14-58Z/) | 2026-04-29 | `02b87497` (Leo: ct2code skill + updated pdf2ct skill) | pdf2ct: complete; ct2code: 5-instance/subset dry-run on `claude-4-sonnet` via Cursor subagent. SHACL: SKIPPED (validator state per docs of the time). | 65.98 |
+| [`02b87497_2026-04-30T08-03Z`](runs/02b87497_2026-04-30T08-03Z/) | 2026-04-30 | `02b87497` (same as above) | pdf2ct: complete; ct2code: fresh 5-instance/subset dry-run on `claude-4-sonnet` via Cursor subagent. SHACL: actually RAN; FAIL on all 4 with two known shape bugs (verbatim output captured). Reproducibility comparison vs the 2026-04-29 run: numerical 5/5 deterministic, poetry/github_prs 1/5 deterministic. | 61.79 |
+
+The two runs share parent commit, prompts (byte-identical), model, and hyperparameters — so the metric delta (`-4 F1` overall) is purely run-to-run nondeterminism in the Cursor-subagent invocation of `claude-4-sonnet` at "T=0". Numerical sequences are deterministic-friendly; longer free-form outputs (poetry, github_prs) are not. See [`runs/02b87497_2026-04-30T08-03Z/README.md`](runs/02b87497_2026-04-30T08-03Z/README.md) for the per-instance breakdown.
 
 ## Quick navigation
 
-- The most recent run's full report: [`runs/02b87497_2026-04-29T14-58Z/README.md`](runs/02b87497_2026-04-29T14-58Z/README.md).
-- The TaskProblem (definition of the benchmark, latest snapshot): [`runs/02b87497_2026-04-29T14-58Z/pdf2ct/absencebench_problem.jsonld`](runs/02b87497_2026-04-29T14-58Z/pdf2ct/absencebench_problem.jsonld).
-- The implementation script (latest): [`runs/02b87497_2026-04-29T14-58Z/ct2code/absencebench_implementation.py`](runs/02b87497_2026-04-29T14-58Z/ct2code/absencebench_implementation.py).
+- The most recent run's full report: [`runs/02b87497_2026-04-30T08-03Z/README.md`](runs/02b87497_2026-04-30T08-03Z/README.md).
+- The TaskProblem (definition of the benchmark, latest snapshot): [`runs/02b87497_2026-04-30T08-03Z/pdf2ct/absencebench_problem.jsonld`](runs/02b87497_2026-04-30T08-03Z/pdf2ct/absencebench_problem.jsonld).
+- The implementation script (latest): [`runs/02b87497_2026-04-30T08-03Z/ct2code/absencebench_implementation.py`](runs/02b87497_2026-04-30T08-03Z/ct2code/absencebench_implementation.py).
 
 ## A note on the snapshot convention vs. `mmlu/` and `xlsum/`
 
